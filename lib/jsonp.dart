@@ -61,7 +61,7 @@ Future get(String urlGenerator(String callback), {Type type: null}) {
  * released once you are finished working with it, otherwise you will leak
  * memory.
  */
-Stream<js.Proxy> getMany(String urlGenerator(String callback), String stream, {Type type: null}) {
+Stream getMany(String urlGenerator(String callback), String stream, {Type type: null}) {
   if ( ! _streams.containsKey(stream) ) {
     _streams[stream] = new _ManyWrapper(stream, _get_id());
   }
