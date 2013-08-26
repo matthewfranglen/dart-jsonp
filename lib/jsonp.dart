@@ -30,7 +30,7 @@ import "dart:mirrors";
  */
 Future get({String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( uri == null && uriGenerator == null ) {
-    return null;
+    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
   }
 
   Completer<js.Proxy> result = new Completer<js.Proxy>();
@@ -67,7 +67,7 @@ Future get({String uri: null, String uriGenerator(String callback): null, Type t
  */
 Stream<js.Proxy> getMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( uri == null && uriGenerator == null ) {
-    return null;
+    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
   }
 
   if ( ! _streams.containsKey(stream) ) {
