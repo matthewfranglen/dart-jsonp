@@ -65,7 +65,7 @@ Future get({String uri: null, String uriGenerator(String callback): null, Type t
  * released once you are finished working with it, otherwise you will leak
  * memory.
  */
-Stream<js.Proxy> getMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+Stream getMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( uri == null && uriGenerator == null ) {
     throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
   }
