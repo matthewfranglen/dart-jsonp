@@ -62,16 +62,16 @@ Future get(String urlGenerator(String callback), {Type type: null}) {
  * memory.
  */
 Stream<js.Proxy> getMany(String urlGenerator(String callback), String stream, {Type type: null}) {
-  if ( ! streams.containsKey(stream) ) {
-    streams[stream] = new _ManyWrapper(stream, _get_id());
+  if ( ! _streams.containsKey(stream) ) {
+    _streams[stream] = new _ManyWrapper(stream, _get_id());
   }
-  streams[stream].get(urlGenerator);
+  _streams[stream].get(urlGenerator);
 
   if ( type == null ) {
-    return streams[stream].stream;
+    return _streams[stream].stream;
   }
   else {
-    return streams[stream].stream.transform(new StreamTransformer<js.Proxy, Object>(
+    return _streams[stream].stream.transform(new StreamTransformer<js.Proxy, Object>(
         handleData: (js.Proxy data, EventSink<Object> sink) {
           sink.add(_to_type(data, type));
         }));
@@ -83,13 +83,13 @@ Stream<js.Proxy> getMany(String urlGenerator(String callback), String stream, {T
  * many short lived streams then you should call this or you will leak memory.
  */
 void disposeMany(String stream) {
-  if ( streams.containsKey(stream) ) {
-    streams[stream].dispose();
-    streams[stream] = null;
+  if ( _streams.containsKey(stream) ) {
+    _streams[stream].dispose();
+    _streams[stream] = null;
   }
 }
 
-Map<String, _ManyWrapper> streams = new Map<String, _ManyWrapper>();
+Map<String, _ManyWrapper> _streams = new Map<String, _ManyWrapper>();
 
 /**
  * This collects together the different parts that make up the getMany stream.
