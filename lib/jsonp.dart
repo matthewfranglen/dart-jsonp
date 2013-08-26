@@ -28,7 +28,7 @@ import "dart:mirrors";
  *
  * It's simple, but you need to know the shape of the data in advance.
  */
-Future<js.Proxy> get(String urlGenerator(String callback)) {
+Future get(String urlGenerator(String callback), {Type type: null}) {
   Completer<js.Proxy> result = new Completer<js.Proxy>();
   String callback = _get_id();
 
@@ -38,22 +38,13 @@ Future<js.Proxy> get(String urlGenerator(String callback)) {
   });
   _get(urlGenerator, callback);
 
-  return result.future;
+  if ( type == null ) {
+    return result.future;
+  }
+  else {
+    return result.future.then((js.Proxy data) => _to_type(data, type));
+  }
 }
-
-/**
- * This will load the json data from the remote server and automatically
- * transform it into the appropriate class. This requires that the provided
- * type have a 'fromProxy' method.
- *
- * This will handle releasing the js.Proxy object.
- */
-Future getAs(String urlGenerator(String callback), Type type) =>
-    get(urlGenerator).then((js.Proxy data) {
-      var result = _get_as(data, type);
-      js.release(data);
-      return result;
-    });
 
 /**
  * This will allow you to make repeated requests and have all of the responses
@@ -70,28 +61,22 @@ Future getAs(String urlGenerator(String callback), Type type) =>
  * released once you are finished working with it, otherwise you will leak
  * memory.
  */
-Stream<js.Proxy> getMany(String urlGenerator(String callback), String stream) {
+Stream<js.Proxy> getMany(String urlGenerator(String callback), String stream, {Type type: null}) {
   if ( ! streams.containsKey(stream) ) {
     streams[stream] = new _ManyWrapper(stream, _get_id());
   }
   streams[stream].get(urlGenerator);
-  return streams[stream].stream;
-}
 
-/**
- * This will transform the stream so that all js.Proxy objects returned are
- * transformed into the specified type.
- *
- * This will handle releasing the js.Proxy object.
- */
-Stream getManyAs(String urlGenerator(String callback), String stream, Type type) =>
-    getMany(urlGenerator, stream).transform(
-      new StreamTransformer<js.Proxy, Object>(
-          handleData: (js.Proxy data, EventSink<Object> sink) {
-            sink.add(_get_as(data, type));
-            js.release(data);
-          }
-        ));
+  if ( type == null ) {
+    return streams[stream].stream;
+  }
+  else {
+    return streams[stream].stream.transform(new StreamTransformer<js.Proxy, Object>(
+        handleData: (js.Proxy data, EventSink<Object> sink) {
+          sink.add(_to_type(data, type));
+        }));
+  }
+}
 
 /**
  * This will release the resources associated with the stream. If you create
