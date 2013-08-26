@@ -154,6 +154,19 @@ String _get_id() {
   return result;
 }
 
+/**
+ * Adds a callback=... query parameter to the provided uri.
+ */
+String _add_callback_to_uri(String uri, String callback) {
+  Uri parsed;
+  Map<String, String> queryString;
+
+  parsed = Uri.parse(uri);
+  parsed.queryParameters["callback"] = callback;
+
+  return parsed.toString();
+}
+
 // Called in two different places, so put here. Also needs work.
 void _get(String urlGenerator(String callback), String callback) =>
   document.body.nodes.add(new ScriptElement()..src = urlGenerator(callback));
