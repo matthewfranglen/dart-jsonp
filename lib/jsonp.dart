@@ -173,5 +173,13 @@ String _get_id() {
 void _get(String urlGenerator(String callback), String callback) =>
   document.body.nodes.add(new ScriptElement()..src = urlGenerator(callback));
 
-Object _get_as(js.Proxy data, Type type) =>
-  reflectClass(type).invoke(const Symbol('fromProxy'), [data]);
+/**
+ * Converts the data to the provided type. Also handles releasing the data, so
+ * this can be put after the regular stream or future for a fat comma call with
+ * no problems.
+ */
+Object _to_type(js.Proxy data, Type type) {
+  Object result = reflectClass(type).invoke(const Symbol('fromProxy'), [data]);
+  js.release(data);
+  return result;
+}
