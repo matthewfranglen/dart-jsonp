@@ -162,6 +162,15 @@ String _get_id() {
   return result;
 }
 
+// Called in two different places, so put here. Also needs work.
+void _get(String callback, {String uri: null, String uriGenerator(String callback): null}) {
+  if ( uri == null && uriGenerator == null ) {
+    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
+  }
+
+  document.body.nodes.add(new ScriptElement()..src = uri != null ? _add_callback_to_uri(uri, callback) : uriGenerator(callback));
+}
+
 /**
  * Adds a callback=... query parameter to the provided uri.
  */
@@ -173,15 +182,6 @@ String _add_callback_to_uri(String uri, String callback) {
   parsed.queryParameters["callback"] = callback;
 
   return parsed.toString();
-}
-
-// Called in two different places, so put here. Also needs work.
-void _get(String callback, {String uri: null, String uriGenerator(String callback): null}) {
-  if ( uri == null && uriGenerator == null ) {
-    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
-  }
-
-  document.body.nodes.add(new ScriptElement()..src = uri != null ? _add_callback_to_uri(uri, callback) : uriGenerator(callback));
 }
 
 /**
