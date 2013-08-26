@@ -40,7 +40,7 @@ Future get({String uri: null, String uriGenerator(String callback): null, Type t
     js.retain(data);
     result.complete(data);
   });
-  _get(uri, uriGenerator, callback);
+  _get(callback, uri: uri, uriGenerator: uriGenerator);
 
   if ( type == null ) {
     return result.future;
@@ -139,7 +139,7 @@ class _ManyWrapper {
   /**
    * Issues a get that will be received by the stream.
    */
-  void get({String uri: null, String uriGenerator(String callback): null}) => _get(uri, uriGenerator, jsCallbackName);
+  void get({String uri: null, String uriGenerator(String callback): null}) => _get(jsCallbackName, uri: uri, uriGenerator: uriGenerator);
 
   /**
    * Releases all resources associated with the stream. Don't forget to call
@@ -176,8 +176,13 @@ String _add_callback_to_uri(String uri, String callback) {
 }
 
 // Called in two different places, so put here. Also needs work.
-void _get(String uri, String uriGenerator(String callback), String callback) =>
+void _get(String callback, {String uri: null, String uriGenerator(String callback): null}) {
+  if ( uri == null && uriGenerator == null ) {
+    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
+  }
+
   document.body.nodes.add(new ScriptElement()..src = uri != null ? _add_callback_to_uri(uri, callback) : uriGenerator(callback));
+}
 
 /**
  * Converts the data to the provided type. Also handles releasing the data, so
