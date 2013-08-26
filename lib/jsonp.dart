@@ -28,7 +28,11 @@ import "dart:mirrors";
  *
  * It's simple, but you need to know the shape of the data in advance.
  */
-Future get(String urlGenerator(String callback), {Type type: null}) {
+Future get({String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+  if ( uri == null && uriGenerator == null ) {
+    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
+  }
+
   Completer<js.Proxy> result = new Completer<js.Proxy>();
   String callback = _get_id();
 
@@ -36,7 +40,7 @@ Future get(String urlGenerator(String callback), {Type type: null}) {
     js.retain(data);
     result.complete(data);
   });
-  _get(urlGenerator, callback);
+  _get(uri, uriGenerator, callback);
 
   if ( type == null ) {
     return result.future;
@@ -61,11 +65,15 @@ Future get(String urlGenerator(String callback), {Type type: null}) {
  * released once you are finished working with it, otherwise you will leak
  * memory.
  */
-Stream getMany(String urlGenerator(String callback), String stream, {Type type: null}) {
+Stream getMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+  if ( uri == null && uriGenerator == null ) {
+    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
+  }
+
   if ( ! _streams.containsKey(stream) ) {
     _streams[stream] = new _ManyWrapper(stream, _get_id());
   }
-  _streams[stream].get(urlGenerator);
+  _streams[stream].get(uri: uri, uriGenerator: uriGenerator);
 
   if ( type == null ) {
     return _streams[stream].stream;
@@ -131,7 +139,7 @@ class _ManyWrapper {
   /**
    * Issues a get that will be received by the stream.
    */
-  void get(String urlGenerator(String callback)) => _get(urlGenerator, jsCallbackName);
+  void get({String uri: null, String uriGenerator(String callback): null}) => _get(uri, uriGenerator, jsCallbackName);
 
   /**
    * Releases all resources associated with the stream. Don't forget to call
@@ -154,9 +162,22 @@ String _get_id() {
   return result;
 }
 
+/**
+ * Adds a callback=... query parameter to the provided uri.
+ */
+String _add_callback_to_uri(String uri, String callback) {
+  Uri parsed;
+  Map<String, String> queryString;
+
+  parsed = Uri.parse(uri);
+  parsed.queryParameters["callback"] = callback;
+
+  return parsed.toString();
+}
+
 // Called in two different places, so put here. Also needs work.
-void _get(String urlGenerator(String callback), String callback) =>
-  document.body.nodes.add(new ScriptElement()..src = urlGenerator(callback));
+void _get(String uri, String uriGenerator(String callback), String callback) =>
+  document.body.nodes.add(new ScriptElement()..src = uri != null ? _add_callback_to_uri(uri, callback) : uriGenerator(callback));
 
 /**
  * Converts the data to the provided type. Also handles releasing the data, so
