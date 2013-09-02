@@ -197,7 +197,7 @@ String _add_callback_to_uri(String uri, String callback) {
  * no problems.
  */
 Object _to_type(js.Proxy data, Type type) {
-  Object result = reflectClass(type).newInstance(const Symbol('fromProxy'), [data]);
+  InstanceMirror result = reflectClass(type).newInstance(const Symbol('fromProxy'), [data]);
   js.release(data);
-  return result;
+  return result.reflectee;
 }
