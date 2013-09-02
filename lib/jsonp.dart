@@ -28,7 +28,7 @@ import "dart:mirrors";
  *
  * It's simple, but you need to know the shape of the data in advance.
  */
-Future get({String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+Future fetch({String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( uri == null && uriGenerator == null ) {
     throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
   }
@@ -64,16 +64,18 @@ Future get({String uri: null, String uriGenerator(String callback): null, Type t
  * Futures and their values. The js.Proxy object that this returns must be
  * released once you are finished working with it, otherwise you will leak
  * memory.
+ *
+ * You can get the named stream without making an associated request by just
+ * asking without indicating a url to retrieve.
  */
-Stream getMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
-  if ( uri == null && uriGenerator == null ) {
-    throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
-  }
-
+Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( ! _streams.containsKey(stream) ) {
     _streams[stream] = new _ManyWrapper(stream, _get_id());
   }
-  _streams[stream].get(uri: uri, uriGenerator: uriGenerator);
+
+  if ( uri != null || uriGenerator != null ) {
+    _streams[stream].get(uri: uri, uriGenerator: uriGenerator);
+  }
 
   if ( type == null ) {
     return _streams[stream].stream;

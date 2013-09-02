@@ -6,14 +6,14 @@ JSONP handler for Dartlang. Allows you to make individual and multiple requests,
 Examples
 --------
 
-When you use _get_ to request a url a future will be returned. This future will complete with the raw jsonp response:
+When you use _fetch_ to request a url a future will be returned. This future will complete with the raw jsonp response:
 
     import "package:js/js.dart" as js;
     import "dart:async";
     import "package:jsonp/jsonp.dart" as jsonp;
 
     // In this example the returned json data would be: { "data": "some text" }
-    Future<js.Proxy> result = jsonp.get( uri: "http://example.com/rest/object/1" );
+    Future<js.Proxy> result = jsonp.fetch( uri: "http://example.com/rest/object/1" );
 
     result.then((js.Proxy proxy) {
       print(proxy.data);
@@ -34,29 +34,29 @@ The proxy objects can be time consuming to handle, as you don't get things like 
       }
     }
 
-    jsonp.get( uri: "http://example.com/rest/object/1", Type: ExampleData )
+    jsonp.fetch( uri: "http://example.com/rest/object/1", Type: ExampleData )
       .then((ExampleData object) => print(object.data));
 
-If you want to request many objects and deal with them as they come in, use _getMany_ to make requests to a stream.
+If you want to request many objects and deal with them as they come in, use _fetchMany_ to make requests to a stream.
 
-    Stream<js.Proxy> object_stream = jsonp.getMany( "object", uri: "http://example.com/rest/object/1" );
-    Stream<js.Proxy> user_stream = jsonp.getMany( "user", uri: "http://example.com/rest/user/1" );
+    Stream<js.Proxy> object_stream = jsonp.fetchMany( "object", uri: "http://example.com/rest/object/1" );
+    Stream<js.Proxy> user_stream = jsonp.fetchMany( "user", uri: "http://example.com/rest/user/1" );
 
     object_stream.forEach( (js.Proxy data) => print("Received object!") );
     user_stream.forEach( (js.Proxy data) => print("Received user!") );
 
     // You just need to refer to the stream by name to make further requests
-    jsonp.getMany( "object", uri: "http://example.com/rest/object/2" );
-    jsonp.getMany( "object", uri: "http://example.com/rest/object/3" );
-    jsonp.getMany( "object", uri: "http://example.com/rest/object/4" );
+    jsonp.fetchMany( "object", uri: "http://example.com/rest/object/2" );
+    jsonp.fetchMany( "object", uri: "http://example.com/rest/object/3" );
+    jsonp.fetchMany( "object", uri: "http://example.com/rest/object/4" );
 
-The automatic type conversion is also available. Each call to _getMany_ can choose to set a type which will alter the returned stream (basically, you don't need to specify the type unless you actually use the stream).
+The automatic type conversion is also available. Each call to _fetchMany_ can choose to set a type which will alter the returned stream (basically, you don't need to specify the type unless you actually use the stream).
 
-    Stream<ExampleData> example_stream = jsonp.getMany( "object", uri: "http://example.com/rest/object/1", type: ExampleData );
+    Stream<ExampleData> example_stream = jsonp.fetchMany( "object", uri: "http://example.com/rest/object/1", type: ExampleData );
 
     example_stream.forEach( (ExampleData object) => print("Received ${object.data}") );
 
     // No need for the type when you don't use the returned stream
-    jsonp.getMany( "object", uri: "http://example.com/rest/object/2" );
-    jsonp.getMany( "object", uri: "http://example.com/rest/object/3" );
-    jsonp.getMany( "object", uri: "http://example.com/rest/object/4" );
+    jsonp.fetchMany( "object", uri: "http://example.com/rest/object/2" );
+    jsonp.fetchMany( "object", uri: "http://example.com/rest/object/3" );
+    jsonp.fetchMany( "object", uri: "http://example.com/rest/object/4" );
