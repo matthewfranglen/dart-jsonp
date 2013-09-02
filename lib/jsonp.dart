@@ -156,7 +156,7 @@ var id = 1;
 
 String _get_id() {
   // TODO: race condition
-  String result = "jsonp_receive_" + id;
+  String result = "jsonp_receive_${id}";
   id++;
 
   return result;
