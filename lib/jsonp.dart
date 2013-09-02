@@ -28,7 +28,7 @@ import "dart:mirrors";
  *
  * It's simple, but you need to know the shape of the data in advance.
  */
-Future get({String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+Future fetch({String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( uri == null && uriGenerator == null ) {
     throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
   }
@@ -65,7 +65,7 @@ Future get({String uri: null, String uriGenerator(String callback): null, Type t
  * released once you are finished working with it, otherwise you will leak
  * memory.
  */
-Stream getMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   if ( uri == null && uriGenerator == null ) {
     throw new ArgumentError("Missing Parameter: uri or uriGenerator required");
   }
