@@ -175,13 +175,20 @@ void _get(String callback, {String uri: null, String uriGenerator(String callbac
  * Adds a callback=... query parameter to the provided uri.
  */
 String _add_callback_to_uri(String uri, String callback) {
-  Uri parsed;
-  Map<String, String> queryString;
+  Uri parsed, updated;
 
   parsed = Uri.parse(uri);
-  parsed.queryParameters["callback"] = callback;
+  updated = new Uri(
+      scheme: parsed.scheme,
+      userInfo: parsed.userInfo,
+      host: parsed.host,
+      port: parsed.port,
+      path: parsed.path,
+      fragment: parsed.fragment,
+      queryParameters: new Map.from(parsed.queryParameters)..['callback'] = callback
+    );
 
-  return parsed.toString();
+  return updated.toString();
 }
 
 /**
