@@ -4,6 +4,5 @@ author: Matthew Franglen <matthew.franglen@gmail.com>
 homepage: https://github.com/matthewfranglen/dart-jsonp
 description: Read from jsonp enabled websites
 dependencies:
-  unittest: any
   js: any
   web_ui: any
