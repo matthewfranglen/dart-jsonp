@@ -6,3 +6,4 @@ description: Read from jsonp enabled websites
 dependencies:
   unittest: any
   js: any
+  web_ui: any
