@@ -174,12 +174,16 @@ void _get(String callback, {String uri: null, String uriGenerator(String callbac
 }
 
 /**
- * Adds a callback=... query parameter to the provided uri.
+ * Replaces any of the query values that are '?' with the callback name.
  */
 String _add_callback_to_uri(String uri, String callback) {
   Uri parsed, updated;
+  Map<String, String> query;
 
   parsed = Uri.parse(uri);
+  query = new Map<String, String>();
+  parsed.queryParameters.forEach((String key, String value) => query[key] = value == '?' ? callback : value);
+
   updated = new Uri(
       scheme: parsed.scheme,
       userInfo: parsed.userInfo,
@@ -187,7 +191,7 @@ String _add_callback_to_uri(String uri, String callback) {
       port: parsed.port,
       path: parsed.path,
       fragment: parsed.fragment,
-      queryParameters: new Map.from(parsed.queryParameters)..['callback'] = callback
+      queryParameters: query
     );
 
   return updated.toString();
