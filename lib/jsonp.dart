@@ -179,10 +179,21 @@ void _get(String callback, {String uri: null, String uriGenerator(String callbac
 String _add_callback_to_uri(String uri, String callback) {
   Uri parsed, updated;
   Map<String, String> query;
+  int count = 0;
 
   parsed = Uri.parse(uri);
   query = new Map<String, String>();
-  parsed.queryParameters.forEach((String key, String value) => query[key] = value == '?' ? callback : value);
+  parsed.queryParameters.forEach((String key, String value) {
+    if (value == '?') {
+      query[key] = callback;
+      count++;
+    } else {
+      query[key] = value;
+    }
+  });
+  if (count == 0) {
+    throw new ArgumentError("Missing Callback Placeholder: when providing a uri, at least one query parameter must have the ? value");
+  }
 
   updated = new Uri(
       scheme: parsed.scheme,
