@@ -10,10 +10,14 @@ import "dart:mirrors";
  * important that you call js.release() on the returned js.Proxy object once
  * you have finished handling it, otherwise you will leak memory.
  *
- * This takes a function that when called with the name of the jsonp callback
- * will return the full url to request. This may seem a bit clumsy, but the
- * callback name is encapsulated by this library, while the urls of interest
- * come from the calling code.
+ * This takes a url which includes a query parameter that has a value of [?].
+ * This value will be replaced with the callback method name. There must be at
+ * least one such parameter in the url.
+ *
+ * If you require a url of a different form then you can use the url generator
+ * parameter. This allows you to pass a function which will be called with the
+ * callback name. Use this to create and return the url according to any rules
+ * or requirements.
  *
  * Usually something like the following is sufficient (assuming you have
  * defined $url):
@@ -174,12 +178,27 @@ void _get(String callback, {String uri: null, String uriGenerator(String callbac
 }
 
 /**
- * Adds a callback=... query parameter to the provided uri.
+ * Replaces any of the query values that are '?' with the callback name.
  */
 String _add_callback_to_uri(String uri, String callback) {
   Uri parsed, updated;
+  Map<String, String> query;
+  int count = 0;
 
   parsed = Uri.parse(uri);
+  query = new Map<String, String>();
+  parsed.queryParameters.forEach((String key, String value) {
+    if (value == '?') {
+      query[key] = callback;
+      count++;
+    } else {
+      query[key] = value;
+    }
+  });
+  if (count == 0) {
+    throw new ArgumentError("Missing Callback Placeholder: when providing a uri, at least one query parameter must have the ? value");
+  }
+
   updated = new Uri(
       scheme: parsed.scheme,
       userInfo: parsed.userInfo,
@@ -187,7 +206,7 @@ String _add_callback_to_uri(String uri, String callback) {
       port: parsed.port,
       path: parsed.path,
       fragment: parsed.fragment,
-      queryParameters: new Map.from(parsed.queryParameters)..['callback'] = callback
+      queryParameters: query
     );
 
   return updated.toString();

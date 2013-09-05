@@ -1,0 +1,19 @@
+.tweet-user-img {
+  margin-top: 1em;
+  float: right;
+}
+.tweet-user-name {
+  float: right;
+  clear: right;
+}
+
+#tweets .row {
+  margin-left: 0;
+}
+#tweets .row:nth-child(even) {
+  background: #FCFCFC;
+}
+
+.well {
+  margin: 1em 0;
+}
