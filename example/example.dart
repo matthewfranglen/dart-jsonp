@@ -90,8 +90,10 @@ var stream = 'tweet';
  * will just add each tweet to the list as it is received.
  */
 void request10() {
-  jsonp.fetchMany(stream, uri: "${_seth_ladd}&count=10&page=${(page / 10).toInt()}");
-  page += 10;
+  for (int i = 0;i < 10;i++) {
+    jsonp.fetchMany(stream, uri: "${_seth_ladd}&count=1&page=${page}");
+    page += 1;
+  }
 }
 
 /**
