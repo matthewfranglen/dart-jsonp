@@ -66,6 +66,8 @@ The automatic type conversion is also available. Each call to _fetchMany_ can ch
 Examples
 --------
 
+A pre built version of the example can be viewed [here](http://matthewfranglen.github.io/dart-jsonp/example/out/example.html). It has been converted to javascript.
+
 An example of using the library can be found in the examples folder. This example uses the web_ui package to handle displaying the returned content. **This means it must be compiled**.
 
 To get the required packages you may have to run _pub install_ in the root of the library. Once you have the packages installed, you can then run the build script _from within the example folder_ (right click run in the editor is fine).
