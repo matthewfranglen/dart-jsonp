@@ -10,10 +10,14 @@ import "dart:mirrors";
  * important that you call js.release() on the returned js.Proxy object once
  * you have finished handling it, otherwise you will leak memory.
  *
- * This takes a function that when called with the name of the jsonp callback
- * will return the full url to request. This may seem a bit clumsy, but the
- * callback name is encapsulated by this library, while the urls of interest
- * come from the calling code.
+ * This takes a url which includes a query parameter that has a value of [?].
+ * This value will be replaced with the callback method name. There must be at
+ * least one such parameter in the url.
+ *
+ * If you require a url of a different form then you can use the url generator
+ * parameter. This allows you to pass a function which will be called with the
+ * callback name. Use this to create and return the url according to any rules
+ * or requirements.
  *
  * Usually something like the following is sufficient (assuming you have
  * defined $url):
