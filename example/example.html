@@ -19,24 +19,22 @@
 
     <body>
 
-        <div class="navbar navbar-inverse navbar-fixed-top">
-            <div class="navbar-inner">
-                <div class="container">
-                    <a class="brand" href="#">JSONP Dart Demo</a>
-                </div>
-            </div>
-        </div>
-
         <div class="container">
 
             <!-- Main hero unit for a primary marketing message or call to action -->
             <div class="row">
+              <div class="offset2 span8">
                 <h1>Hello, world!</h1>
-                <p id="target">
+                <p>
                     This will read the twitter of @sethladd!
                 </p>
+              </div>
+              <div class="offset3 span2">
                 <p><a on-click="request()" class="btn btn-primary btn-large">Read &raquo;</a></p>
+              </div>
+              <div class="offset1 span2">
                 <p><a on-click="request10()" class="btn btn-primary btn-large">Read 10 &raquo;</a></p>
+              </div>
             </div>
 
             <div id="tweets">
