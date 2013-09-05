@@ -64,7 +64,7 @@ void handleTweet(Tweet tweet) {
 
 // The twitter feed to follow. Try out different ones (you can check them in
 // your browser).
-var _seth_ladd = 'https://twitter.com/status/user_timeline/sethladd?format=json';
+var _seth_ladd = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=?';
 
 // The list of tweets to display.
 @observable
