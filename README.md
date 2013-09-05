@@ -3,10 +3,10 @@ Dart JSONP
 
 JSONP handler for Dartlang. Allows you to make individual and multiple requests, as well as providing some support for automatically converting the responses to Dart classes.
 
-Examples
---------
+Usage
+------
 
-When you use _fetch_ to request a url a future will be returned. This future will complete with the raw jsonp response:
+When you use _fetch_ to request a URL a future will be returned. This future will complete with the raw JSONP response:
 
     import "package:js/js.dart" as js;
     import "dart:async";
@@ -60,3 +60,12 @@ The automatic type conversion is also available. Each call to _fetchMany_ can ch
     jsonp.fetchMany( "object", uri: "http://example.com/rest/object/2" );
     jsonp.fetchMany( "object", uri: "http://example.com/rest/object/3" );
     jsonp.fetchMany( "object", uri: "http://example.com/rest/object/4" );
+
+Examples
+--------
+
+An example of using the library can be found in the examples folder. This example uses the web_ui package to handle displaying the returned content. This means it must be compiled.
+
+To get the required packages you may have to run _pub install_ in the root of the library. Once you have the packages installed, you can then run the build script _from within the example folder_.
+
+After building you can view the example at _out/example.html_ in Dartium.
