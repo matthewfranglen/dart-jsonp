@@ -14,7 +14,8 @@ The easiest way is to provide a complete URL which includes a callback query par
 
 If you need more control over the creation of the URL, then you can take the more advanced approach. This means providing a function which takes a String (the callback method name) and returns a string (the request URL including the callback parameter). As you define the function, this approach allows total control over the constructed URL.
 
-    jsonp.fetch( uriGenerator: (String callback) => "http://example.com/rest/object/1?callback=$callback" );
+    jsonp.fetch( uriGenerator: (String callback) =>
+        "http://example.com/rest/object/1?callback=$callback" );
 
 ### Single Requests
 
