@@ -2,6 +2,7 @@ library jsonp.impl;
 
 import 'dart:async';
 import 'handlers.dart';
+import 'external.dart';
 
 /**
  * Returns a future that will complete with the data from the jsonp endpoint.
@@ -31,8 +32,8 @@ import 'handlers.dart';
  *
  * It's simple, but you need to know the shape of the data in advance.
  */
-Future fetch({String uri: null, String uriGenerator(String callback): null, Type type: null}) =>
-  (new Once()..request((String callback) => _generate_url(uri, uriGenerator, callback))).future(type: type);
+Future fetch(External external, {String uri: null, String uriGenerator(String callback): null, Type type: null}) =>
+  (new Once(external)..request((String callback) => _generate_url(uri, uriGenerator, callback))).future(type: type);
 
 /**
  * This will allow you to make repeated requests and have all of the responses
@@ -52,8 +53,8 @@ Future fetch({String uri: null, String uriGenerator(String callback): null, Type
  * You can get the named stream without making an associated request by just
  * asking without indicating a url to retrieve.
  */
-Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
-  final Many many = new Many(stream);
+Stream fetchMany(External external, String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+  final Many many = new Many(external, stream);
 
   if (uri != null || uriGenerator != null) {
     many.request((String callback) => _generate_url(uri, uriGenerator, callback));

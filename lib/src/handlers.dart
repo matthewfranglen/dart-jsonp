@@ -1,9 +1,8 @@
-library jsonp.adaptors;
+library jsonp.handlers;
 
-import "package:js/js.dart" as js;
-import "dart:async";
-import "dart:html";
-import "dart:mirrors";
+import 'dart:async';
+import 'dart:mirrors';
+import 'external.dart' show External;
 
 class CallbackHandler {
   // Each Once instance needs a unique id, this is used to distinguish them
@@ -16,21 +15,24 @@ class CallbackHandler {
     return "jsonp_receive_${_count++}";
   }
 
+  final External external;
   final String callback = _get_id();
+
+  CallbackHandler(this.external);
 
   /**
    * Adds the javascript to the page which will trigger the request.
    */
-  void request(String generator(String callback)) => document.body.nodes.add(new ScriptElement()..src = generator(callback));
+  void request(String generator(String callback)) => external.html.request(generator(callback));
 
   /**
    * Converts the data to the provided type. Also handles releasing the data, so
    * this can be put after the regular stream or future for a fat comma call with
    * no problems.
    */
-  Object convert(Type type, js.Proxy data) {
+  Object convert(Type type, var data) {
     InstanceMirror result = reflectClass(type).newInstance(const Symbol('fromProxy'), [data]);
-    js.release(data);
+    external.js.releaseData(data);
     return result.reflectee;
   }
 }
@@ -42,16 +44,13 @@ class Once extends CallbackHandler {
   // This handles the callback from the JSONP request, allowing this class to present the result as a Future
   final Completer _completer = new Completer();
 
-  Once() {
-    js.context[callback] = new js.Callback.once((js.Proxy data) {
-      js.retain(data);
-      _completer.complete(data);
-    });
+  Once(External external) : super(external) {
+    external.js.makeOnceCallback(callback, _completer);
   }
 
   Future future({Type type: null}) => type == null
                                     ? _completer.future
-                                    : _completer.future.then((js.Proxy data) => convert(type, data));
+                                    : _completer.future.then((var data) => convert(type, data));
 }
 
 /**
@@ -64,9 +63,9 @@ class Many extends CallbackHandler {
   /**
    * Returns the ManyWrapper associated with the name provided. Will create it if required.
    */
-  factory Many(String name) {
+  factory Many(External external, String name) {
     if (! _streams.containsKey(name)) {
-      _streams[name] = new Many._Impl(name);
+      _streams[name] = new Many._Impl(external, name);
     }
     return _streams[name];
   }
@@ -84,21 +83,13 @@ class Many extends CallbackHandler {
 
   // The stream controller for the stream that is returned by the getMany
   // method.
-  StreamController<js.Proxy> _stream;
-
-  // The js callback object that is invoked by the jsonp responses. This must
-  // be released when the stream is destroyed.
-  js.Callback _jsCallback;
+  StreamController _stream = new StreamController();
 
   /**
    * Private constructor for use by the factory.
    */
-  Many._Impl(this.name) {
-    _stream = new StreamController<js.Proxy>();
-    js.context[callback] = _jsCallback = new js.Callback.many((js.Proxy data) {
-      js.retain(data);
-      _stream.add(data);
-    });
+  Many._Impl(External external, this.name) : super(external) {
+    external.js.makeManyCallback(callback, _stream);
   }
 
   /**
@@ -106,10 +97,9 @@ class Many extends CallbackHandler {
    */
   Stream stream({Type type: null}) => type == null
                                     ? _stream.stream
-                                    : _stream.stream.transform(new StreamTransformer<js.Proxy, Object>(
-                                        handleData: (js.Proxy data, EventSink<Object> sink) {
-                                          sink.add(convert(type, data));
-                                        }));
+                                    : _stream.stream.transform(new StreamTransformer<dynamic, Object>(
+                                        handleData: (var data, EventSink<Object> sink) => sink.add(convert(type, data))
+                                      ));
 
   /**
    * Releases all resources associated with the stream. Don't forget to call
@@ -119,6 +109,6 @@ class Many extends CallbackHandler {
    */
   void _dispose() {
     _stream.close();
-    _jsCallback.dispose();
+    external.js.releaseCallback(name);
   }
 }
