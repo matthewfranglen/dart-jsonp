@@ -102,6 +102,11 @@ class Many extends CallbackHandler {
                                       ));
 
   /**
+   * Adds an error to the stream.
+   */
+  void error(Object error, [Object stackTrace]) => _stream.addError(error, stackTrace);
+
+  /**
    * Releases all resources associated with the stream. Don't forget to call
    * this!
    *

@@ -66,7 +66,12 @@ Stream fetchMany(External external, String stream, {String uri: null, String uri
   final Many many = new Many(external, stream);
 
   if (uri != null || uriGenerator != null) {
-    many.request((String callback) => _generate_url(uri, uriGenerator, callback));
+    try {
+      many.request((String callback) => _generate_url(uri, uriGenerator, callback));
+    }
+    catch (e) {
+      many.error(e);
+    }
   }
   return many.stream(type: type);
 }
