@@ -6,19 +6,33 @@ import 'dart:async';
 import 'package:unittest/unittest.dart';
 import 'package:unittest/mock.dart';
 
+/**
+ * This class just encapsulates some test data which can be passed through the
+ * jsonp handling code with ease.
+ */
 class TestData {
   var value;
 
+  // This allows easy creation in tests
   TestData(this.value);
+  // This allows autocompletion
   TestData.fromProxy(var proxy) : value = proxy['value'];
 
+  // The object is stringified when there are comparison failures
   String toString() => "TestData(${value})";
+  // Conversion to proxy is useful for passing through the jsonp callback code.
+  // This does not return a real js.Proxy, but it is good enough because we are
+  // handling the autocompletion code in fromProxy.
   dynamic toProxy() => { 'value': value };
 
+  // Test comparisons depend on equals, which by default tests by reference
   bool operator ==(var compare) =>
       compare != null && compare is TestData && value == compare.value;
 }
 
+/**
+ * Test the one shot callbacks.
+ */
 test_once () {
   External ext;
   TestData data = new TestData('value');
@@ -48,6 +62,9 @@ test_once () {
   );
 }
 
+/**
+ * Test the streamable callbacks.
+ */
 test_many () {
   External ext;
   TestData data = new TestData('value');
@@ -80,7 +97,10 @@ test_many () {
       return completer.future;
   }
 
+  // The completer here allows the separate tests to be divided while still
+  // forcing the disposeMany call to come after the first test.
   Completer first = new Completer();
+
   test( 'Test no autoconversion', () =>
       makeManyRequest(null)
         .then((v) => new TestData.fromProxy(v))
