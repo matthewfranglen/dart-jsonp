@@ -73,7 +73,7 @@ class Many extends CallbackHandler {
   static dispose(String name) {
     if (_streams.containsKey(name)) {
       _streams[name]._dispose();
-      _streams[name] = null;
+      _streams.remove(name);
     }
   }
 
