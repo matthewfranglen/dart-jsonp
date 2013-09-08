@@ -47,4 +47,5 @@ class External {
   final Html html;
 
   const External(this.js, this.html);
+  External.dynamic(this.js, this.html);
 }
