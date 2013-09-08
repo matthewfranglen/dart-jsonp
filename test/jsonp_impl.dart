@@ -152,8 +152,50 @@ test_many () {
   );
 }
 
+/**
+ * Test the problematic streamable callbacks.
+ */
+test_many_exception () {
+  External ext;
+
+  {
+    JavascriptMock js;
+    HtmlMock html;
+
+    js = new JavascriptMock();
+    html = new HtmlMock();
+    html.when(callsTo('request')).alwaysThrow(new Exception());
+
+    ext = new External.dynamic(js, html);
+  }
+
+  Future makeManyRequest() {
+    Completer completer;
+
+    // The test waits for the future to complete. When using a stream, I don't
+    // get a nice future to return, so a completer is used to handle this. Also
+    // allows easy tracking for the possibility of extra items being returned.
+    completer = new Completer();
+    jsonp.fetchMany(ext, "exception", uri: "http://example.com/rest/resource/1?format=jsonp&callback=?")
+        .handleError((e) => completer.isCompleted
+                          ? completer.completeError(new Exception('Already received value'))
+                          : completer.complete(e))
+        .forEach((v) => fail('Exception not passed through Stream'));
+    return completer.future;
+  }
+
+  // The completer here allows the separate tests to be divided while still
+  // forcing the disposeMany call to come after the first test.
+  Completer first = new Completer();
+
+  test( 'Test exception throwing js', () =>
+      makeManyRequest()
+        .then((e) { expect(e, isException); first.complete(e); }));
+}
+
 main () {
   group( 'Once callbacks working', test_once );
   group( 'Once callbacks working', test_once_exception );
   group( 'Many callbacks working', test_many );
+  group( 'Many callbacks working', test_many_exception );
 }
