@@ -73,7 +73,7 @@ class Many extends CallbackHandler {
   static dispose(String name) {
     if (_streams.containsKey(name)) {
       _streams[name]._dispose();
-      _streams[name] = null;
+      _streams.remove(name);
     }
   }
 
@@ -100,6 +100,11 @@ class Many extends CallbackHandler {
                                     : _stream.stream.transform(new StreamTransformer<dynamic, Object>(
                                         handleData: (var data, EventSink<Object> sink) => sink.add(convert(type, data))
                                       ));
+
+  /**
+   * Adds an error to the stream.
+   */
+  void error(Object error, [Object stackTrace]) => _stream.addError(error, stackTrace);
 
   /**
    * Releases all resources associated with the stream. Don't forget to call
