@@ -42,9 +42,9 @@ abstract class Html {
   void request(String url);
 }
 
-class External {
-  final Javascript js;
-  final Html html;
+class External<J extends Javascript, H extends Html> {
+  final J js;
+  final H html;
 
   const External(this.js, this.html);
   External.dynamic(this.js, this.html);
