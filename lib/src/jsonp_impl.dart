@@ -32,8 +32,17 @@ import 'external.dart';
  *
  * It's simple, but you need to know the shape of the data in advance.
  */
-Future fetch(External external, {String uri: null, String uriGenerator(String callback): null, Type type: null}) =>
-  (new Once(external)..request((String callback) => _generate_url(uri, uriGenerator, callback))).future(type: type);
+Future fetch(External external, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+  try {
+    final Once once = new Once(external);
+
+    once.request((String callback) => _generate_url(uri, uriGenerator, callback));
+    return once.future(type: type);
+  }
+  catch (e) {
+    return new Future.error(e);
+  }
+}
 
 /**
  * This will allow you to make repeated requests and have all of the responses

@@ -63,6 +63,43 @@ test_once () {
 }
 
 /**
+ * Test problematic one shot callbacks.
+ */
+test_once_exception () {
+  External ext;
+
+  {
+    JavascriptMock js;
+    HtmlMock html;
+
+    js = new JavascriptMock();
+    js.when(callsTo('makeOnceCallback')).alwaysThrow(new Exception());
+    html = new HtmlMock();
+
+    ext = new External.dynamic(js, html);
+  }
+
+  test( 'Test exception throwing js', () =>
+      jsonp.fetch(ext, uri: "http://example.com/rest/resource/1?format=jsonp&callback=?")
+        .then((_) => fail('Exception not passed through Future'), onError: (e) => expect(e, isException)));
+
+  {
+    JavascriptMock js;
+    HtmlMock html;
+
+    js = new JavascriptMock();
+    html = new HtmlMock();
+    html.when(callsTo('request')).alwaysThrow(new Exception());
+
+    ext = new External.dynamic(js, html);
+  }
+
+  test( 'Test exception throwing html', () =>
+      jsonp.fetch(ext, uri: "http://example.com/rest/resource/1?format=jsonp&callback=?")
+        .then((_) => fail('Exception not passed through Future'), onError: (e) => expect(e, isException)));
+}
+
+/**
  * Test the streamable callbacks.
  */
 test_many () {
@@ -117,5 +154,6 @@ test_many () {
 
 main () {
   group( 'Once callbacks working', test_once );
+  group( 'Once callbacks working', test_once_exception );
   group( 'Many callbacks working', test_many );
 }
