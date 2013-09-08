@@ -48,6 +48,54 @@ test_once () {
   );
 }
 
+test_many () {
+  External ext;
+  TestData data = new TestData('value');
+
+  {
+    JavascriptMock js;
+    HtmlMock html;
+    StreamController stream;
+
+    js = new JavascriptMock();
+    js.when(callsTo('makeManyCallback')).thenCall((_callback, _stream) => stream = _stream, 2);
+
+    html = new HtmlMock();
+    html.when(callsTo('request')).thenCall((url) => stream.add(data.toProxy()), 2);
+
+    ext = new External.dynamic(js, html);
+  }
+
+  Future makeManyRequest(Type type) {
+    Completer completer;
+
+    // The test waits for the future to complete. When using a stream, I don't
+    // get a nice future to return, so a completer is used to handle this. Also
+    // allows easy tracking for the possibility of extra items being returned.
+    completer = new Completer();
+    jsonp.fetchMany(ext, "test", uri: "http://example.com/rest/resource/1?format=jsonp&callback=?", type: type)
+        .forEach((v) => completer.isCompleted
+                      ? completer.completeError(new Exception('Already received value'))
+                      : completer.complete(v));
+      return completer.future;
+  }
+
+  Completer first = new Completer();
+  test( 'Test no autoconversion', () =>
+      makeManyRequest(null)
+        .then((v) => new TestData.fromProxy(v))
+        .then((v) { expect(v, equals(data)); first.complete(v); })
+    );
+
+  test( 'Test autoconversion', () =>
+    first.future
+      .then((_) => jsonp.disposeMany("test"))
+      .then((_) => makeManyRequest(TestData))
+      .then((v) => expect(v, equals(data)))
+  );
+}
+
 main () {
   group( 'Once callbacks working', test_once );
+  group( 'Many callbacks working', test_many );
 }
