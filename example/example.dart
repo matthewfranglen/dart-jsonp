@@ -49,9 +49,6 @@ List<Tweet> listFromProxy(js.Proxy data) {
     result.add(new Tweet.fromProxy(data[i]));
   }
 
-  // Don't forget to release the data!
-  js.release(data);
-
   return result;
 }
 

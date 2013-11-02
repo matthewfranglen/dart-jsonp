@@ -97,7 +97,7 @@ class Many extends CallbackHandler {
    */
   Stream stream({Type type: null}) => type == null
                                     ? _stream.stream
-                                    : _stream.stream.transform(new StreamTransformer<dynamic, Object>(
+                                    : _stream.stream.transform(new StreamTransformer<dynamic, Object>.fromHandlers(
                                         handleData: (var data, EventSink<Object> sink) => sink.add(convert(type, data))
                                       ));
 

@@ -6,9 +6,7 @@ import 'external.dart';
 
 /**
  * Returns a future that will complete with the data from the jsonp endpoint.
- * This will return the js.Proxy object, which will be like a map. It is
- * important that you call js.release() on the returned js.Proxy object once
- * you have finished handling it, otherwise you will leak memory.
+ * This will return the js.Proxy object, which will be like a map.
  *
  * This takes a url which includes a query parameter that has a value of [?].
  * This value will be replaced with the callback method name. There must be at

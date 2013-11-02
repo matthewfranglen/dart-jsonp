@@ -35,9 +35,6 @@ When you use _fetch_ to request a URL a future will be returned. This future wil
 
     result.then((js.Proxy proxy) {
       print(proxy.data);
-
-      // It is important to release the data!
-      js.release(proxy);
     });
 
 #### Type Conversion
@@ -65,8 +62,6 @@ The proxy objects can be time consuming to handle, as you don't get things like 
 The _fetchMany_ and _disposeMany_ methods can be used to handle many requests.
 
 The _fetchMany_ method will return a named Stream which receives individual results. This Stream is identified by the _name_ parameter in the request, sharing single Streams across multiple requests. This means you only need to set up result handling code once, as all results will be handled by the same Stream.
-
-The persistent stream takes up resources. If you no longer need it then you should use the _disposeMany_ method to release the associated resources. Any unfinished requests will not be handled.
 
 By default the Stream provides js.Proxy objects:
 
