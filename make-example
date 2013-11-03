@@ -1,0 +1,49 @@
+#!/bin/zsh
+# This will prepare the example for serving via github.
+# This will:
+# * Compile the dart code
+# * Compile the javascript code
+# * Fix the packages folder in example
+
+ROOT_FOLDER=${0:A:h}
+EXAMPLE_FOLDER=${ROOT_FOLDER}/example
+OUT_FOLDER=${EXAMPLE_FOLDER}/out
+PACKAGES_FOLDER=${EXAMPLE_FOLDER}/packages
+ROOT_PACKAGES_FOLDER=${ROOT_FOLDER}/packages
+
+function clean () {
+    [ -e ${OUT_FOLDER} ] && rm -rf ${OUT_FOLDER}
+    [ -e ${PACKAGES_FOLDER} ] && rm -rf ${PACKAGES_FOLDER}
+    pub install
+}
+
+function compile_dart () {
+    (
+        cd ${EXAMPLE_FOLDER}
+        dart build.dart
+    )
+}
+
+function compile_javascript () {
+    (
+        cd ${OUT_FOLDER}
+        dart2js -o example.html_bootstrap.dart.js example.html_bootstrap.dart
+    )
+}
+
+function fix_package_folder () {
+    # The ${PACKAGES_FOLDER} is actually a symlink at this point so a plain rm should work
+    rm ${PACKAGES_FOLDER}
+
+    mkdir ${PACKAGES_FOLDER}
+    for file in $(cd ${ROOT_PACKAGES_FOLDER}; ls ***/*(.))
+    do
+        mkdir -p ${PACKAGES_FOLDER}/${file:h}
+        cp ${ROOT_PACKAGES_FOLDER}/${file} ${PACKAGES_FOLDER}/${file}
+    done
+}
+
+clean
+compile_dart && compile_javascript && fix_package_folder
+
+# vim: set ai et sw=4 syntax=zsh :
