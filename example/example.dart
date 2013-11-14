@@ -1,6 +1,6 @@
 import 'package:web_ui/web_ui.dart';
 import 'package:jsonp/jsonp.dart' as jsonp;
-import "package:js/js.dart" as js;
+import 'package:js/js.dart' as js;
 
 /**
  * Wraps up the user details in a nice class. For the moment only the name and
