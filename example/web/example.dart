@@ -74,9 +74,10 @@ var page = 1;
 /**
  * Makes a request for a single tweet using a one time request.
  */
-void request() {
+void request(event, detail, target) {
   jsonp.fetch(uri: "${_seth_ladd}&count=1&page=${page}")
     .then((js.Proxy data) => listFromProxy(data).forEach(handleTweet));
+  print("test");
   page += 1;
 }
 
@@ -86,11 +87,12 @@ var stream = 'tweet';
  * Requests 10 tweets at once. The stream handler is set up in [main()] and
  * will just add each tweet to the list as it is received.
  */
-void request10() {
+void request10(event, detail, target) {
   for (int i = 0;i < 10;i++) {
     jsonp.fetchMany(stream, uri: "${_seth_ladd}&count=1&page=${page}");
     page += 1;
   }
+  print("test");
 }
 
 /**
