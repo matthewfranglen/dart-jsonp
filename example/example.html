@@ -40,7 +40,7 @@
             <hr>
 
             <div id="tweets">
-                <template iterate="tweet in tweets">
+                <template iterate="{{ tweet in tweets }}">
                     <div class="row">
                         <div class="span2">
                             <img class="tweet-user-img img-rounded" src="{{ tweet.user.imageUrl }}" />

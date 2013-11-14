@@ -1,4 +1,4 @@
-import 'package:web_ui/web_ui.dart';
+import 'package:polymer/polymer.dart';
 import 'package:jsonp/jsonp.dart' as jsonp;
 import 'package:js/js.dart' as js;
 
