@@ -6,4 +6,4 @@ description: Read from jsonp enabled websites
 dependencies:
   js: any
 dev_dependencies:
-  web_ui: any
+  polymer: any
