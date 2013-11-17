@@ -14,7 +14,7 @@ ROOT_PACKAGES_FOLDER=${ROOT_FOLDER}/packages
 function clean () {
     [ -e ${OUT_FOLDER} ] && rm -rf ${OUT_FOLDER}
     [ -e ${PACKAGES_FOLDER} ] && rm -rf ${PACKAGES_FOLDER}
-    pub install
+    pub install && pub update
 }
 
 function compile_dart () {
@@ -22,28 +22,38 @@ function compile_dart () {
         cd ${EXAMPLE_FOLDER}
         dart build.dart
     )
+
+    # This DOES NOT put jsonp in the example/out/packages folder that is
+    # generated. Since this library cannot be referenced as a dependency in
+    # it's own pubspec.yaml, and I don't want a single project to have two
+    # definitions, the best I can do is patch over it.
+    [ ! -e ${EXAMPLE_FOLDER}/out/packages/jsonp ] && cp -r ${ROOT_FOLDER}/lib ${EXAMPLE_FOLDER}/out/packages/jsonp
 }
 
 function compile_javascript () {
     (
-        cd ${OUT_FOLDER}
+        cd ${OUT_FOLDER}/web
         dart2js -o example.html_bootstrap.dart.js example.html_bootstrap.dart
     )
 }
 
-function fix_package_folder () {
-    # The ${PACKAGES_FOLDER} is actually a symlink at this point so a plain rm should work
+function fix_layout () {
+    # The example.html file used to be in the out directory directly. This
+    # should be preserved, so the following dance needs to happen:
+    # 1) Remove example/packages
+    # 2) Move example/out/packages to example/packages
+    # 3) Move example/out/web somewhere
+    # 4) Remove example/out
+    # 5) Move the old example/out/web to example/out
     rm ${PACKAGES_FOLDER}
 
-    mkdir ${PACKAGES_FOLDER}
-    for file in $(cd ${ROOT_PACKAGES_FOLDER}; ls ***/*(.))
-    do
-        mkdir -p ${PACKAGES_FOLDER}/${file:h}
-        cp ${ROOT_PACKAGES_FOLDER}/${file} ${PACKAGES_FOLDER}/${file}
-    done
+    mv ${OUT_FOLDER}/packages ${PACKAGES_FOLDER}
+    mv ${OUT_FOLDER}/web ${EXAMPLE_FOLDER}/out-tmp
+    rmdir ${OUT_FOLDER}
+    mv ${EXAMPLE_FOLDER}/out-tmp ${OUT_FOLDER}
 }
 
 clean
-compile_dart && compile_javascript && fix_package_folder
+compile_dart && compile_javascript && fix_layout
 
 # vim: set ai et sw=4 syntax=zsh :
