@@ -9,13 +9,14 @@
 
         <!-- Le styles -->
         <link href="css/bootstrap.css" rel="stylesheet">
-        <link href="css/style.css" rel="stylesheet">
         <link href="css/bootstrap-responsive.css" rel="stylesheet">
 
         <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
         <!--[if lt IE 9]>
         <script src="static/js/html5shiv.js"></script>
         <![endif]-->
+
+        <link rel="import" href="my-tweets.html">
     </head>
 
     <body>
@@ -30,30 +31,17 @@
                     </p>
                 </div>
                 <div class="offset3 span2 pagination-centered">
-                    <p><a on-click="request()" class="btn btn-primary btn-large">Read &raquo;</a></p>
+                    <p><a id="read" class="btn btn-primary btn-large">Read &raquo;</a></p>
                 </div>
                 <div class="offset2 span2 pagination-centered">
-                    <p><a on-click="request10()" class="btn btn-primary btn-large">Read 10 &raquo;</a></p>
+                    <p><a id="read_10" class="btn btn-primary btn-large">Read 10 &raquo;</a></p>
                 </div>
             </div>
 
             <hr>
 
-            <div id="tweets">
-                <template iterate="tweet in tweets">
-                    <div class="row">
-                        <div class="span2">
-                            <img class="tweet-user-img img-rounded" src="{{ tweet.user.imageUrl }}" />
-                            <p class="tweet-user-name">{{ tweet.user.name }}</p>
-                        </div>
-                        <div class="span8">
-                            <div class="text-center well">
-                                {{ tweet.tweet }}
-                            </div>
-                        </div>
-                    </div>
-                </template>
-            </div>
+            <my-tweets id="tweets"></my-tweets>
+
 
         </div> <!-- /container -->
 

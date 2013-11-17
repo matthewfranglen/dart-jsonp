@@ -2,3 +2,4 @@ packages
 !example/packages
 !example/out/packages
 pubspec.lock
+.buildlog

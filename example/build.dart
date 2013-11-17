@@ -1,7 +1,5 @@
-import 'package:web_ui/component_build.dart';
-import 'dart:io';
+import 'package:polymer/builder.dart';
 
-// Ref: http://www.dartlang.org/articles/dart-web-components/tools.html
 main() {
-    build(new Options().arguments, ['example.html']);
+  build(entryPoints: ['web/example.html']);
 }
