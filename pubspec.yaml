@@ -7,3 +7,4 @@ dependencies:
   js: any
 dev_dependencies:
   polymer: any
+  unittest: any
