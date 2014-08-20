@@ -25,11 +25,6 @@ abstract class Javascript {
    * Releases the named callback.
    */
   void releaseCallback(String name);
-
-  /**
-   * Releases the json data.
-   */
-  void releaseData(var data);
 }
 
 abstract class Html {

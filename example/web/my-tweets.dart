@@ -1,11 +1,7 @@
 import 'package:polymer/polymer.dart';
-import 'package:js/js.dart' as js;
 
 @CustomTag('my-tweets')
 class MyTweetsElement extends PolymerElement {
-  // This lets the Bootstrap CSS "bleed through" into the Shadow DOM
-  // of this element.
-  bool get applyAuthorStyles => true;
 
   @observable List<Tweet> tweets = toObservable([]);
 
@@ -16,7 +12,7 @@ class MyTweetsElement extends PolymerElement {
    * would want multiple tweets at once. If it returned one at a time, then the
    * Tweet class could be directly created by the jsonp library.
    */
-  void handle(js.Proxy data) {
+  void handle(var data) {
     // Unfortunately, the proxy object is unable to be correctly inspected,
     // leading to warnings about non existant properties. This is because the
     // content of it is determined by the javascript code.
@@ -40,8 +36,8 @@ class User {
 
   User(this.imageUrl, this.name);
   User.fromProxy(var data) :
-    imageUrl = data.profile_image_url,
-    name = data.name;
+    imageUrl = data['profile_image_url'],
+    name = data['name'];
 }
 
 /**
@@ -55,7 +51,7 @@ class Tweet {
 
   Tweet(this.user, this.tweet, this.timestamp);
   Tweet.fromProxy(var data) :
-    user = new User.fromProxy(data.user),
-    tweet = data.text,
-    timestamp = data.created_at;
+    user = new User.fromProxy(data['user']),
+    tweet = data['text'],
+    timestamp = data['created_at'];
 }

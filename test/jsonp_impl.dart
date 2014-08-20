@@ -21,8 +21,6 @@ class TestData {
   // The object is stringified when there are comparison failures
   String toString() => "TestData(${value})";
   // Conversion to proxy is useful for passing through the jsonp callback code.
-  // This does not return a real js.Proxy, but it is good enough because we are
-  // handling the autocompletion code in fromProxy.
   dynamic toProxy() => { 'value': value };
 
   // Test comparisons depend on equals, which by default tests by reference
