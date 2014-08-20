@@ -17,7 +17,7 @@ function clean () {
 function compile_javascript () {
     (
         cd ${ROOT_FOLDER}
-        pub build --output ${BUILD_FOLDER} example
+        pub build --output ${BUILD_FOLDER} --mode debug example
     )
 }
 
