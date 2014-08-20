@@ -29,10 +29,11 @@ function fix_layout () {
 
     [ -e ${TARGET_FOLDER} ] && rm -rf ${TARGET_FOLDER}
     mv ${BUILD_FOLDER}/example/web ${TARGET_FOLDER}
-    mv ${BUILD_FOLDER}/example/packages ${TARGET_FOLDER}
+
+    rm -rf ${SOURCE_FOLDER}/packages
+    mv ${BUILD_FOLDER}/example/packages ${SOURCE_FOLDER}
 
     rm -rf ${BUILD_FOLDER}
-    rm ${SOURCE_FOLDER}/packages
 }
 
 clean
