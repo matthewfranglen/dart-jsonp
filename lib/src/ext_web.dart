@@ -2,7 +2,7 @@ library json.ext_web;
 
 import 'dart:async';
 import 'dart:html';
-import 'package:js/js.dart' as js;
+import 'dart:js' as js;
 import 'external.dart';
 
 class JavascriptImpl extends Javascript {
@@ -13,7 +13,7 @@ class JavascriptImpl extends Javascript {
    * Makes a callback that will complete the completer with the resulting data.
    */
   void makeOnceCallback(String name, Completer completer) {
-    js.context[name] = (js.Proxy data) {
+    js.context[name] = (var data) {
       completer.complete(data);
     };
   }
@@ -22,7 +22,7 @@ class JavascriptImpl extends Javascript {
    * Makes a callback that will populate the stream with the resulting data.
    */
   void makeManyCallback(String name, StreamController stream) {
-    js.context[name] = (js.Proxy data) {
+    js.context[name] = (var data) {
       stream.add(data);
     };
   }

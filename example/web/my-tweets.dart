@@ -1,5 +1,4 @@
 import 'package:polymer/polymer.dart';
-import 'package:js/js.dart' as js;
 
 @CustomTag('my-tweets')
 class MyTweetsElement extends PolymerElement {
@@ -16,7 +15,7 @@ class MyTweetsElement extends PolymerElement {
    * would want multiple tweets at once. If it returned one at a time, then the
    * Tweet class could be directly created by the jsonp library.
    */
-  void handle(js.Proxy data) {
+  void handle(var data) {
     // Unfortunately, the proxy object is unable to be correctly inspected,
     // leading to warnings about non existant properties. This is because the
     // content of it is determined by the javascript code.
