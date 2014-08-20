@@ -1,10 +1,8 @@
 name: jsonp
-version: 1.0.0
+version: 1.0.1
 author: Matthew Franglen <matthew.franglen@gmail.com>
 homepage: https://github.com/matthewfranglen/dart-jsonp
 description: Read from jsonp enabled websites
-dependencies:
-  js: any
 dev_dependencies:
   polymer: any
   unittest: any

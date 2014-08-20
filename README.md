@@ -3,6 +3,79 @@ Dart JSONP
 
 JSONP handler for Dartlang. Allows you to make individual and multiple requests, as well as providing some support for automatically converting the responses to Dart classes.
 
+General Note
+------------
+
+This library is not required because you can make JSONP requests very easily with pure Dart.
+
+Using javascript has become significantly easier since this was originally written. To perform a JSONP request without using this library is as easy as:
+
+    import 'dart:html';
+    import 'dart:js';
+
+    context['callbackMethod'] = (JsObject response) {
+      // Do something with the response object. The JsObject can be treated like a dictionary.
+    }
+
+    document.body.children.add(
+        new Element.tag('script')
+          ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
+      );
+
+To get a Future for this do the following:
+
+    import 'dart:async';
+    import 'dart:html';
+    import 'dart:js';
+
+    Completer callbackCompleter = new Completer();
+
+    context['callbackMethod'] = (response) {
+      callbackCompleter.complete(response);
+    }
+
+    document.body.children.add(
+        new Element.tag('script')
+          ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
+      );
+    callbackCompleter.future.then((JsObject response) {
+      // Do something with the response object. The JsObject can be treated like a dictionary.
+    });
+
+The javascript method does not break after the first use, so you can repeatedly call it:
+
+    import 'dart:async';
+    import 'dart:html';
+    import 'dart:js';
+
+    Completer callbackCompleter;
+    Element scriptTag;
+
+    context['callbackMethod'] = (response) {
+      scriptTag.remove();
+      callbackCompleter.complete(response);
+    }
+
+    Future update() {
+      callbackCompleter = new Completer();
+      scriptTag = new Element.tag('script')
+            ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod';
+
+      document.body.children.add(scriptTag);
+
+      return callbackCompleter.future;
+    }
+
+    void repeat() {
+      update().then((JsObject response) {
+        // Do something with the response object. The JsObject can be treated like a dictionary.
+
+        new Future(new Duration(seconds: 5), repeat);
+      });
+    }
+
+There is an example of using JSONP [here](https://www.dartlang.org/samples/jsonp/) with source code. You can read more about Dart Javascript interoperability [here](https://www.dartlang.org/articles/js-dart-interop/).
+
 Usage
 ------
 
@@ -21,20 +94,19 @@ If you need more control over the creation of the URL, then you can take the mor
 
 The _fetch_ method can be used to make a single request.
 
-When you use _fetch_ to request a URL a future will be returned. This future will complete with the raw JSON response (a js.Proxy object):
+When you use _fetch_ to request a URL a future will be returned. This future will complete with the response from the JSONP request.
 
-    import "package:js/js.dart" as js;
     import "dart:async";
     import "package:jsonp/jsonp.dart" as jsonp;
 
     // In this example the returned json data would be:
     // { "data": "some text" }
-    Future<js.Proxy> result = jsonp.fetch(
+    Future<dynamic> result = jsonp.fetch(
         uri: "http://example.com/rest/object/1?callback=?"
       );
 
-    result.then((js.Proxy proxy) {
-      print(proxy.data);
+    result.then((var proxy) {
+      print(proxy['data']);
     });
 
 #### Type Conversion
@@ -44,10 +116,8 @@ The proxy objects can be time consuming to handle, as you don't get things like 
     class ExampleData {
       var data;
 
-      // The js library can make unit testing difficult, you can just
-      // use var as the js.Proxy object in your method.
       static fromProxy(var proxy) {
-        this.data = proxy.data;
+        this.data = proxy['data'];
       }
     }
 
@@ -63,21 +133,21 @@ The _fetchMany_ and _disposeMany_ methods can be used to handle many requests.
 
 The _fetchMany_ method will return a named Stream which receives individual results. This Stream is identified by the _name_ parameter in the request, sharing single Streams across multiple requests. This means you only need to set up result handling code once, as all results will be handled by the same Stream.
 
-By default the Stream provides js.Proxy objects:
+By default the Stream provides the response from the JSONP request.
 
-    Stream<js.Proxy> object_stream = jsonp.fetchMany(
+    Stream<dynamic> object_stream = jsonp.fetchMany(
         "object", uri: "http://example.com/rest/object/1?callback=?"
       );
 
     // The uri is optional when making a fetchMany request
     // as you may just want to configure the Stream
-    Stream<js.Proxy> user_stream = jsonp.fetchMany("user");
+    Stream<dynamic> user_stream = jsonp.fetchMany("user");
 
     object_stream.forEach(
-        (js.Proxy data) => print("Received object!")
+        (var data) => print("Received object!")
       );
     user_stream.forEach(
-        (js.Proxy data) => print("Received user!")
+        (var data) => print("Received user!")
       );
 
     // You just need to refer to the stream by name to make further requests

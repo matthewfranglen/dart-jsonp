@@ -32,7 +32,6 @@ class CallbackHandler {
    */
   Object convert(Type type, var data) {
     InstanceMirror result = reflectClass(type).newInstance(const Symbol('fromProxy'), [data]);
-    external.js.releaseData(data);
     return result.reflectee;
   }
 }
