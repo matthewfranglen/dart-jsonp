@@ -31,6 +31,7 @@ function fix_layout () {
     mv ${BUILD_FOLDER}/example/packages ${TARGET_FOLDER}
 
     rm -rf ${BUILD_FOLDER}
+    rm ${SOURCE_FOLDER}/packages
 }
 
 clean
