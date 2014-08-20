@@ -11,7 +11,6 @@ TARGET_FOLDER=${SOURCE_FOLDER}/out
 
 function clean () {
     [ -e ${BUILD_FOLDER} ] && rm -rf ${BUILD_FOLDER}
-    [ -e ${TARGET_FOLDER} ] && rm -rf ${TARGET_FOLDER}
     pub install && pub update
 }
 
@@ -27,6 +26,7 @@ function fix_layout () {
     # of the example folder. The packages for this is directly within, but the
     # code that uses them is within web. So things must be moved.
 
+    [ -e ${TARGET_FOLDER} ] && rm -rf ${TARGET_FOLDER}
     mv ${BUILD_FOLDER}/example/web ${TARGET_FOLDER}
     mv ${BUILD_FOLDER}/example/packages ${TARGET_FOLDER}
 
