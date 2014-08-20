@@ -6,7 +6,7 @@ import 'external.dart';
 
 /**
  * Returns a future that will complete with the data from the jsonp endpoint.
- * This will return Map, List, or simple values.
+ * This will return a JsObject.
  *
  * This takes a url which includes a query parameter that has a value of [?].
  * This value will be replaced with the callback method name. There must be at

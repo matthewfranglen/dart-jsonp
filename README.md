@@ -13,9 +13,8 @@ Using javascript has become significantly easier since this was originally writt
     import 'dart:html';
     import 'dart:js';
 
-    context['callbackMethod'] = (response) {
-      // Do something with the response object.
-      // The response has already been interpreted as a JSON string.
+    context['callbackMethod'] = (JsObject response) {
+      // Do something with the response object. The JsObject can be treated like a dictionary.
     }
 
     document.body.children.add(
@@ -39,9 +38,8 @@ To get a Future for this do the following:
         new Element.tag('script')
           ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
       );
-    callbackCompleter.future.then((response) {
-      // Do something with the response object.
-      // The response has already been interpreted as a JSON string.
+    callbackCompleter.future.then((JsObject response) {
+      // Do something with the response object. The JsObject can be treated like a dictionary.
     });
 
 The javascript method does not break after the first use, so you can repeatedly call it:
@@ -69,9 +67,8 @@ The javascript method does not break after the first use, so you can repeatedly 
     }
 
     void repeat() {
-      update().then((response) {
-        // Do something with the response object.
-        // The response has already been interpreted as a JSON string.
+      update().then((JsObject response) {
+        // Do something with the response object. The JsObject can be treated like a dictionary.
 
         new Future(new Duration(seconds: 5), repeat);
       });

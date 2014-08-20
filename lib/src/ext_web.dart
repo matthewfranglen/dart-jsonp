@@ -10,19 +10,19 @@ class JavascriptImpl extends Javascript {
   const JavascriptImpl();
 
   /**
-   * Makes a callback that will complete the completer with the resulting data.
+   * Makes a callback that will complete the completer with the JsObject received from the JSONP request.
    */
   void makeOnceCallback(String name, Completer completer) {
-    js.context[name] = (var data) {
+    js.context[name] = (js.JsObject data) {
       completer.complete(data);
     };
   }
 
   /**
-   * Makes a callback that will populate the stream with the resulting data.
+   * Makes a callback that will populate the stream with the JsObject received from the JSONP request.
    */
   void makeManyCallback(String name, StreamController stream) {
-    js.context[name] = (var data) {
+    js.context[name] = (js.JsObject data) {
       stream.add(data);
     };
   }
