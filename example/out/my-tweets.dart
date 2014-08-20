@@ -1,9 +1,9 @@
 import 'package:polymer/polymer.dart';
 
 @CustomTag('my-tweets')
-class MyTweetsElement extends PolymerElement {
+class MyTweetsElement extends PolymerElement with ChangeNotifier  {
 
-  @observable List<Tweet> tweets = toObservable([]);
+  @reflectable @observable List<Tweet> get tweets => __$tweets; List<Tweet> __$tweets = toObservable([]); @reflectable set tweets(List<Tweet> value) { __$tweets = notifyPropertyChange(#tweets, __$tweets, value); }
 
   MyTweetsElement.created() : super.created();
 
