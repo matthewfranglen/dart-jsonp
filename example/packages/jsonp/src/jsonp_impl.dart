@@ -6,7 +6,7 @@ import 'external.dart';
 
 /**
  * Returns a future that will complete with the data from the jsonp endpoint.
- * This will return the js.Proxy object, which will be like a map.
+ * This will return a JsObject.
  *
  * This takes a url which includes a query parameter that has a value of [?].
  * This value will be replaced with the callback method name. There must be at
@@ -20,15 +20,6 @@ import 'external.dart';
  * Usually something like the following is sufficient (assuming you have
  * defined $url):
  * (callback) => "$url?callback=$callback"
- *
- * The js.Proxy object is best described with an example. When the jsonp
- * endpoint returns the data:
- * { "one": "1" }
- *
- * The js.Proxy object can access the value of "one" like so:
- * data.one
- *
- * It's simple, but you need to know the shape of the data in advance.
  */
 Future fetch(External external, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
   try {
@@ -45,17 +36,14 @@ Future fetch(External external, {String uri: null, String uriGenerator(String ca
 /**
  * This will allow you to make repeated requests and have all of the responses
  * come back down the same stream. The order of the responses is not
- * guaranteed, and as the js.Proxy object can be difficult to work with it is
- * recommended that you only use this for one specific type of data.
+ * guaranteed.
  *
  * As this is a long running operation, the stream should be disposed of
  * properly when you are finished working with it, otherwise you will leak
  * memory. You can release a stream using the disposeMany(stream) method.
  *
  * The stream that is returned by this operates in the same way as the get(...)
- * Futures and their values. The js.Proxy object that this returns must be
- * released once you are finished working with it, otherwise you will leak
- * memory.
+ * Futures and their values.
  *
  * You can get the named stream without making an associated request by just
  * asking without indicating a url to retrieve.

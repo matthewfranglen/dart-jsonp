@@ -7,32 +7,31 @@ library polymer_expressions.eval;
 import 'dart:async';
 import 'dart:collection';
 
-@MirrorsUsed(metaTargets: const [Reflectable, ObservableProperty],
-    override: 'polymer_expressions.eval')
-import 'dart:mirrors';
-
 import 'package:observe/observe.dart';
+import 'package:smoke/smoke.dart' as smoke;
 
 import 'async.dart';
 import 'expression.dart';
 import 'filter.dart';
 import 'visitor.dart';
-import 'src/mirrors.dart';
 
 final _BINARY_OPERATORS = {
-  '+':  (a, b) => a + b,
-  '-':  (a, b) => a - b,
-  '*':  (a, b) => a * b,
-  '/':  (a, b) => a / b,
-  '==': (a, b) => a == b,
-  '!=': (a, b) => a != b,
-  '>':  (a, b) => a > b,
-  '>=': (a, b) => a >= b,
-  '<':  (a, b) => a < b,
-  '<=': (a, b) => a <= b,
-  '||': (a, b) => a || b,
-  '&&': (a, b) => a && b,
-  '|':  (a, f) {
+  '+':   (a, b) => a + b,
+  '-':   (a, b) => a - b,
+  '*':   (a, b) => a * b,
+  '/':   (a, b) => a / b,
+  '%':   (a, b) => a % b,
+  '==':  (a, b) => a == b,
+  '!=':  (a, b) => a != b,
+  '===': (a, b) => identical(a, b),
+  '!==': (a, b) => !identical(a, b),
+  '>':   (a, b) => a > b,
+  '>=':  (a, b) => a >= b,
+  '<':   (a, b) => a < b,
+  '<=':  (a, b) => a <= b,
+  '||':  (a, b) => a || b,
+  '&&':  (a, b) => a && b,
+  '|':   (a, f) {
     if (f is Transformer) return f.forward(a);
     if (f is Filter) return f(a);
     throw new EvalException("Filters must be a one-argument function.");
@@ -50,11 +49,7 @@ final _BOOLEAN_OPERATORS = ['!', '||', '&&'];
 /**
  * Evaluation [expr] in the context of [scope].
  */
-Object eval(Expression expr, Scope scope) {
-  var observer = observe(expr, scope);
-  new Updater(scope).visit(observer);
-  return observer._value;
-}
+Object eval(Expression expr, Scope scope) => new EvalVisitor(scope).visit(expr);
 
 /**
  * Returns an [ExpressionObserver] that evaluates [expr] in the context of
@@ -64,15 +59,15 @@ Object eval(Expression expr, Scope scope) {
  * [ExpressionObsserver].
  */
 ExpressionObserver observe(Expression expr, Scope scope) {
-  var observer = new ObserverBuilder(scope).visit(expr);
+  var observer = new ObserverBuilder().visit(expr);
   return observer;
 }
 
 /**
  * Causes [expr] to be reevaluated a returns it's value.
  */
-Object update(ExpressionObserver expr, Scope scope) {
-  new Updater(scope).visit(expr);
+Object update(ExpressionObserver expr, Scope scope, {skipChanges: false}) {
+  new Updater(scope, skipChanges).visit(expr);
   return expr.currentValue;
 }
 
@@ -84,10 +79,8 @@ Object update(ExpressionObserver expr, Scope scope) {
  * operators or function invocations, and any index operations must use a
  * literal index.
  */
-void assign(Expression expr, Object value, Scope scope) {
-
-  notAssignable() =>
-      throw new EvalException("Expression is not assignable: $expr");
+Object assign(Expression expr, Object value, Scope scope,
+    {bool checkAssignability: true}) {
 
   Expression expression;
   var property;
@@ -105,134 +98,179 @@ void assign(Expression expr, Object value, Scope scope) {
 
   if (expr is Identifier) {
     expression = empty();
-    Identifier ident = expr;
-    property = ident.value;
-  } else if (expr is Invoke) {
-    Invoke invoke = expr;
-    expression = invoke.receiver;
-    if (invoke.method == '[]') {
-      if (invoke.arguments[0] is! Literal) notAssignable();
-      Literal l = invoke.arguments[0];
-      property = l.value;
-      isIndex = true;
-    } else if (invoke.method != null) {
-      if (invoke.arguments != null) notAssignable();
-      property = invoke.method;
-    } else {
-      notAssignable();
-    }
+    property = expr.value;
+  } else if (expr is Index) {
+    expression = expr.receiver;
+    property = expr.argument;
+    isIndex = true;
+  } else if (expr is Getter) {
+    expression = expr.receiver;
+    property = expr.name;
   } else {
-    notAssignable();
+    if (checkAssignability) {
+      throw new EvalException("Expression is not assignable: $expr");
+    }
+    return null;
   }
 
   // transform the values backwards through the filters
   for (var filterExpr in filters) {
     var filter = eval(filterExpr, scope);
     if (filter is! Transformer) {
-      throw new EvalException("filter must implement Transformer: $filterExpr");
+      if (checkAssignability) {
+        throw new EvalException("filter must implement Transformer to be "
+            "assignable: $filterExpr");
+      } else {
+        return null;
+      }
     }
     value = filter.reverse(value);
   }
-  // make the assignment
+  // evaluate the receiver
   var o = eval(expression, scope);
-  if (o == null) throw new EvalException("Can't assign to null: $expression");
+
+  // can't assign to a property on a null LHS object. Silently fail.
+  if (o == null) return null;
+
   if (isIndex) {
-    o[property] = value;
+    var index = eval(property, scope);
+    o[index] = value;
   } else {
-    reflect(o).setField(new Symbol(property), value);
+    smoke.write(o, smoke.nameToSymbol(property), value);
   }
+  return value;
+}
+
+
+/**
+ * A scope in polymer expressions that can map names to objects. Scopes contain
+ * a set of named variables and a unique model object. The scope structure
+ * is then used to lookup names using the `[]` operator. The lookup first
+ * searches for the name in local variables, then in global variables,
+ * and then finally looks up the name as a property in the model.
+ */
+abstract class Scope implements Indexable<String, Object> {
+  Scope._();
+
+  /** Create a scope containing a [model] and all of [variables]. */
+  factory Scope({Object model, Map<String, Object> variables}) {
+    var scope = new _ModelScope(model);
+    return variables == null ? scope
+        : new _GlobalsScope(new Map<String, Object>.from(variables), scope);
+  }
+
+  /** Return the unique model in this scope. */
+  Object get model;
+
+  /**
+   * Lookup the value of [name] in the current scope. If [name] is 'this', then
+   * we return the [model]. For any other name, this finds the first variable
+   * matching [name] or, if none exists, the property [name] in the [model].
+   */
+  Object operator [](String name);
+
+  operator []=(String name, Object value) {
+    throw new UnsupportedError('[]= is not supported in Scope.');
+  }
+
+  /**
+   * Returns whether [name] is defined in [model], that is, a lookup
+   * would not find a variable with that name, but there is a non-null model
+   * where we can look it up as a property.
+   */
+  bool _isModelProperty(String name);
+
+  /** Create a new scope extending this scope with an additional variable. */
+  Scope childScope(String name, Object value) =>
+      new _LocalVariableScope(name, value, this);
 }
 
 /**
- * A mapping of names to objects. Scopes contain a set of named [variables] and
- * a single [model] object (which can be thought of as the "this" reference).
- * Names are currently looked up in [variables] first, then the [model].
- *
- * Scopes can be nested by giving them a [parent]. If a name in not found in a
- * Scope, it will look for it in it's parent.
+ * A scope that looks up names in a model object. This kind of scope has no
+ * parent scope because all our lookup operations stop when we reach the model
+ * object. Any variables added in scope or global variables are added as child
+ * scopes.
  */
-class Scope {
-  final Scope parent;
+class _ModelScope extends Scope {
   final Object model;
-  // TODO(justinfagnani): disallow adding/removing names
-  final ObservableMap<String, Object> _variables;
-  InstanceMirror __modelMirror;
 
-  Scope({this.model, Map<String, Object> variables: const {}, this.parent})
-      : _variables = new ObservableMap.from(variables);
-
-  InstanceMirror get _modelMirror {
-    if (__modelMirror != null) return __modelMirror;
-    __modelMirror = reflect(model);
-    return __modelMirror;
-  }
+  _ModelScope(this.model) : super._();
 
   Object operator[](String name) {
-    if (name == 'this') {
-      return model;
-    } else if (_variables.containsKey(name)) {
-      return _convert(_variables[name]);
-    } else if (model != null) {
-      var symbol = new Symbol(name);
-      var classMirror = _modelMirror.type;
-      var memberMirror = getMemberMirror(classMirror, symbol);
-      // TODO(jmesserly): simplify once dartbug.com/13002 is fixed.
-      // This can just be "if memberMirror != null" and delete the Method class.
-      if (memberMirror is VariableMirror ||
-          (memberMirror is MethodMirror && memberMirror.isGetter)) {
-        return _convert(_modelMirror.getField(symbol).reflectee);
-      } else if (memberMirror is MethodMirror) {
-        return new Method(_modelMirror, symbol);
-      }
-    }
-    if (parent != null) {
-      return _convert(parent[name]);
-    } else {
+    if (name == 'this') return model;
+    var symbol = smoke.nameToSymbol(name);
+    if (model == null || symbol == null) {
       throw new EvalException("variable '$name' not found");
     }
+    return _convert(smoke.read(model, symbol));
   }
 
-  Object ownerOf(String name) {
-    if (name == 'this') {
-      // we could return the Scope if it were Observable, but since assigning
-      // a model to a template destroys and recreates the instance, it doesn't
-      // seem neccessary
-      return null;
-    } else if (_variables.containsKey(name)) {
-      return _variables;
-    } else {
-      var symbol = new Symbol(name);
-      var classMirror = _modelMirror.type;
-      if (getMemberMirror(classMirror, symbol) != null) {
-        return model;
-      }
-    }
-    if (parent != null) {
-      return parent.ownerOf(name);
-    }
-  }
+  Object _isModelProperty(String name) => name != 'this';
 
-  bool contains(String name) {
-    if (_variables.containsKey(name)) {
-      return true;
-    } else {
-      var symbol = new Symbol(name);
-      var classMirror = _modelMirror.type;
-      if (getMemberMirror(classMirror, symbol) != null) {
-        return true;
-      }
-    }
-    if (parent != null) {
-      return parent.contains(name);
-    }
-    return false;
-  }
+  String toString() => "[model: $model]";
 }
 
-Object _convert(v) {
-  if (v is Stream) return new StreamBinding(v);
-  return v;
+/**
+ * A scope that holds a reference to a single variable. Polymer expressions
+ * introduce variables to the scope one at a time. Each time a variable is
+ * added, a new [_LocalVariableScope] is created.
+ */
+class _LocalVariableScope extends Scope {
+  final Scope parent;
+  final String varName;
+  // TODO(sigmund,justinfagnani): make this @observable?
+  final Object value;
+
+  _LocalVariableScope(this.varName, this.value, this.parent) : super._() {
+    if (varName == 'this') {
+      throw new EvalException("'this' cannot be used as a variable name.");
+    }
+  }
+
+  Object get model => parent != null ? parent.model : null;
+
+  Object operator[](String name) {
+    if (varName == name) return _convert(value);
+    if (parent != null) return parent[name];
+    throw new EvalException("variable '$name' not found");
+  }
+
+  bool _isModelProperty(String name) {
+    if (varName == name) return false;
+    return parent == null ? false : parent._isModelProperty(name);
+  }
+
+  String toString() => "$parent > [local: $varName]";
 }
+
+/** A scope that holds a reference to a global variables. */
+class _GlobalsScope extends Scope {
+  final _ModelScope parent;
+  final Map<String, Object> variables;
+
+  _GlobalsScope(this.variables, this.parent) : super._() {
+    if (variables.containsKey('this')) {
+      throw new EvalException("'this' cannot be used as a variable name.");
+    }
+  }
+
+  Object get model => parent != null ? parent.model : null;
+
+  Object operator[](String name) {
+    if (variables.containsKey(name)) return _convert(variables[name]);
+    if (parent != null) return parent[name];
+    throw new EvalException("variable '$name' not found");
+  }
+
+  bool _isModelProperty(String name) {
+    if (variables.containsKey(name)) return false;
+    return parent == null ? false : parent._isModelProperty(name);
+  }
+
+  String toString() => "$parent > [global: ${variables.keys}]";
+}
+
+Object _convert(v) => v is Stream ? new StreamBinding(v) : v;
 
 abstract class ExpressionObserver<E extends Expression> implements Expression {
   final E _expr;
@@ -246,6 +284,8 @@ abstract class ExpressionObserver<E extends Expression> implements Expression {
 
   ExpressionObserver(this._expr);
 
+  Expression get expression => _expr;
+
   Object get currentValue => _value;
 
   update(Scope scope) => _updateSelf(scope);
@@ -253,25 +293,28 @@ abstract class ExpressionObserver<E extends Expression> implements Expression {
   _updateSelf(Scope scope) {}
 
   _invalidate(Scope scope) {
-    _observe(scope);
+    _observe(scope, false);
     if (_parent != null) {
       _parent._invalidate(scope);
     }
   }
 
-  _observe(Scope scope) {
-    // unobserve last value
+  _unobserve() {
     if (_subscription != null) {
       _subscription.cancel();
       _subscription = null;
     }
+  }
+
+  _observe(Scope scope, skipChanges) {
+    _unobserve();
 
     var _oldValue = _value;
 
     // evaluate
     _updateSelf(scope);
 
-    if (!identical(_value, _oldValue)) {
+    if (!skipChanges && !identical(_value, _oldValue)) {
       _controller.add(_value);
     }
   }
@@ -281,28 +324,143 @@ abstract class ExpressionObserver<E extends Expression> implements Expression {
 
 class Updater extends RecursiveVisitor {
   final Scope scope;
+  final bool skipChanges;
 
-  Updater(this.scope);
+  Updater(this.scope, [this.skipChanges = false]);
 
   visitExpression(ExpressionObserver e) {
-    e._observe(scope);
-  }
-
-  visitInExpression(InObserver c) {
-    visit(c.right);
-    visitExpression(c);
+    e._observe(scope, skipChanges);
   }
 }
 
-class ObserverBuilder extends Visitor {
+class Closer extends RecursiveVisitor {
+  static final _instance = new Closer._();
+  factory Closer() => _instance;
+  Closer._();
+
+  visitExpression(ExpressionObserver e) {
+    e._unobserve();
+  }
+}
+
+class EvalVisitor extends Visitor {
   final Scope scope;
+
+  EvalVisitor(this.scope);
+
+  visitEmptyExpression(EmptyExpression e) => scope.model;
+
+  visitParenthesizedExpression(ParenthesizedExpression e) => visit(e.child);
+
+  visitGetter(Getter g) {
+    var receiver = visit(g.receiver);
+    if (receiver == null) return null;
+    var symbol = smoke.nameToSymbol(g.name);
+    return smoke.read(receiver, symbol);
+  }
+
+  visitIndex(Index i) {
+    var receiver = visit(i.receiver);
+    if (receiver == null) return null;
+    var key = visit(i.argument);
+    return receiver[key];
+  }
+
+  visitInvoke(Invoke i) {
+    var receiver = visit(i.receiver);
+    if (receiver == null) return null;
+    var args = (i.arguments == null)
+        ? null
+        : i.arguments.map(visit).toList(growable: false);
+
+    if (i.method == null) {
+      assert(receiver is Function);
+      return Function.apply(receiver, args);
+    }
+
+    var symbol = smoke.nameToSymbol(i.method);
+    return smoke.invoke(receiver, symbol, args);
+  }
+
+  visitLiteral(Literal l) => l.value;
+
+  visitListLiteral(ListLiteral l) => l.items.map(visit).toList();
+
+  visitMapLiteral(MapLiteral l) {
+    var map = {};
+    for (var entry in l.entries) {
+      var key = visit(entry.key);
+      var value = visit(entry.entryValue);
+      map[key] = value;
+    }
+    return map;
+  }
+
+  visitMapLiteralEntry(MapLiteralEntry e) =>
+      throw new UnsupportedError("should never be called");
+
+  visitIdentifier(Identifier i) => scope[i.value];
+
+  visitBinaryOperator(BinaryOperator o) {
+    var operator = o.operator;
+    var left = visit(o.left);
+    var right = visit(o.right);
+
+    var f = _BINARY_OPERATORS[operator];
+    if (operator == '&&' || operator == '||') {
+      // TODO: short-circuit
+      return f(_toBool(left), _toBool(right));
+    } else if (operator == '==' || operator == '!=') {
+      return f(left, right);
+    } else if (left == null || right == null) {
+      return null;
+    }
+    return f(left, right);
+  }
+
+  visitUnaryOperator(UnaryOperator o) {
+    var expr = visit(o.child);
+    var f = _UNARY_OPERATORS[o.operator];
+    if (o.operator == '!') {
+      return f(_toBool(expr));
+    }
+    return (expr == null) ? null : f(expr);
+  }
+
+  visitTernaryOperator(TernaryOperator o) =>
+      visit(o.condition) == true ? visit(o.trueExpr) : visit(o.falseExpr);
+
+  visitInExpression(InExpression i) =>
+      throw new UnsupportedError("can't eval an 'in' expression");
+
+  visitAsExpression(AsExpression i) =>
+      throw new UnsupportedError("can't eval an 'as' expression");
+}
+
+class ObserverBuilder extends Visitor {
   final Queue parents = new Queue();
 
-  ObserverBuilder(this.scope);
+  ObserverBuilder();
 
   visitEmptyExpression(EmptyExpression e) => new EmptyObserver(e);
 
   visitParenthesizedExpression(ParenthesizedExpression e) => visit(e.child);
+
+  visitGetter(Getter g) {
+    var receiver = visit(g.receiver);
+    var getter = new GetterObserver(g, receiver);
+    receiver._parent = getter;
+    return getter;
+  }
+
+  visitIndex(Index i) {
+    var receiver = visit(i.receiver);
+    var arg = visit(i.argument);
+    var index =  new IndexObserver(i, receiver, arg);
+    receiver._parent = index;
+    arg._parent = index;
+    return index;
+  }
 
   visitInvoke(Invoke i) {
     var receiver = visit(i.receiver);
@@ -316,6 +474,13 @@ class ObserverBuilder extends Visitor {
   }
 
   visitLiteral(Literal l) => new LiteralObserver(l);
+
+  visitListLiteral(ListLiteral l) {
+    var items = l.items.map(visit).toList(growable: false);
+    var list = new ListLiteralObserver(l, items);
+    items.forEach((e) => e._parent = list);
+    return list;
+  }
 
   visitMapLiteral(MapLiteral l) {
     var entries = l.entries.map(visit).toList(growable: false);
@@ -351,14 +516,23 @@ class ObserverBuilder extends Visitor {
     return unary;
   }
 
+  visitTernaryOperator(TernaryOperator o) {
+    var condition = visit(o.condition);
+    var trueExpr = visit(o.trueExpr);
+    var falseExpr = visit(o.falseExpr);
+    var ternary = new TernaryObserver(o, condition, trueExpr, falseExpr);
+    condition._parent = ternary;
+    trueExpr._parent = ternary;
+    falseExpr._parent = ternary;
+    return ternary;
+  }
+
   visitInExpression(InExpression i) {
-    // don't visit the left. It's an identifier, but we don't want to evaluate
-    // it, we just want to add it to the comprehension object
-    var left = visit(i.left);
-    var right = visit(i.right);
-    var inexpr = new InObserver(i, left, right);
-    right._parent = inexpr;
-    return inexpr;
+    throw new UnsupportedError("can't eval an 'in' expression");
+  }
+
+  visitAsExpression(AsExpression i) {
+    throw new UnsupportedError("can't eval an 'as' expression");
   }
 }
 
@@ -386,6 +560,20 @@ class LiteralObserver extends ExpressionObserver<Literal> implements Literal {
   }
 
   accept(Visitor v) => v.visitLiteral(this);
+}
+
+class ListLiteralObserver extends ExpressionObserver<ListLiteral>
+    implements ListLiteral {
+
+  final List<ExpressionObserver> items;
+
+  ListLiteralObserver(ListLiteral value, this.items) : super(value);
+
+  _updateSelf(Scope scope) {
+    _value = items.map((i) => i._value).toList();
+  }
+
+  accept(Visitor v) => v.visitListLiteral(this);
 }
 
 class MapLiteralObserver extends ExpressionObserver<MapLiteral>
@@ -424,17 +612,15 @@ class IdentifierObserver extends ExpressionObserver<Identifier>
 
   _updateSelf(Scope scope) {
     _value = scope[value];
-
-    var owner = scope.ownerOf(value);
-    if (owner is Observable) {
-      var symbol = new Symbol(value);
-      _subscription = (owner as Observable).changes.listen((changes) {
-        if (changes.any(
-            (c) => c is PropertyChangeRecord && c.name == symbol)) {
-          _invalidate(scope);
-        }
-      });
-    }
+    if (!scope._isModelProperty(value)) return;
+    var model = scope.model;
+    if (model is! Observable) return;
+    var symbol = smoke.nameToSymbol(value);
+    _subscription = (model as Observable).changes.listen((changes) {
+      if (changes.any((c) => c is PropertyChangeRecord && c.name == symbol)) {
+        _invalidate(scope);
+      }
+    });
   }
 
   accept(Visitor v) => v.visitIdentifier(this);
@@ -494,6 +680,10 @@ class BinaryObserver extends ExpressionObserver<BinaryOperator>
     } else if (left._value == null || right._value == null) {
       _value = null;
     } else {
+      if (operator == '|' && left._value is ObservableList) {
+        _subscription = (left._value as ObservableList).listChanges
+            .listen((_) => _invalidate(scope));
+      }
       _value = f(left._value, right._value);
     }
   }
@@ -502,70 +692,121 @@ class BinaryObserver extends ExpressionObserver<BinaryOperator>
 
 }
 
+class TernaryObserver extends ExpressionObserver<TernaryOperator>
+    implements TernaryOperator {
+
+  final ExpressionObserver condition;
+  final ExpressionObserver trueExpr;
+  final ExpressionObserver falseExpr;
+
+  TernaryObserver(TernaryOperator expr, this.condition, this.trueExpr,
+      this.falseExpr) : super(expr);
+
+  _updateSelf(Scope scope) {
+    _value = _toBool(condition._value) ? trueExpr._value : falseExpr._value;
+  }
+
+  accept(Visitor v) => v.visitTernaryOperator(this);
+
+}
+
+class GetterObserver extends ExpressionObserver<Getter> implements Getter {
+  final ExpressionObserver receiver;
+
+  GetterObserver(Expression expr, this.receiver) : super(expr);
+
+  String get name => _expr.name;
+
+  _updateSelf(Scope scope) {
+    var receiverValue = receiver._value;
+    if (receiverValue == null) {
+      _value = null;
+      return;
+    }
+    var symbol = smoke.nameToSymbol(_expr.name);
+    _value = smoke.read(receiverValue, symbol);
+
+    if (receiverValue is Observable) {
+      _subscription = (receiverValue as Observable).changes.listen((changes) {
+        if (changes.any((c) => c is PropertyChangeRecord && c.name == symbol)) {
+          _invalidate(scope);
+        }
+      });
+    }
+  }
+
+  accept(Visitor v) => v.visitGetter(this);
+}
+
+class IndexObserver extends ExpressionObserver<Index> implements Index {
+  final ExpressionObserver receiver;
+  final ExpressionObserver argument;
+
+  IndexObserver(Expression expr, this.receiver, this.argument) : super(expr);
+
+  _updateSelf(Scope scope) {
+    var receiverValue = receiver._value;
+    if (receiverValue == null) {
+      _value = null;
+      return;
+    }
+    var key = argument._value;
+    _value = receiverValue[key];
+
+    if (receiverValue is ObservableList) {
+      _subscription = (receiverValue as ObservableList).listChanges
+          .listen((changes) {
+        if (changes.any((c) => c.indexChanged(key))) _invalidate(scope);
+      });
+    } else if (receiverValue is Observable) {
+      _subscription = (receiverValue as Observable).changes.listen((changes) {
+        if (changes.any((c) => c is MapChangeRecord && c.key == key)) {
+          _invalidate(scope);
+        }
+      });
+    }
+  }
+
+  accept(Visitor v) => v.visitIndex(this);
+}
+
 class InvokeObserver extends ExpressionObserver<Invoke> implements Invoke {
   final ExpressionObserver receiver;
-  List<ExpressionObserver> arguments;
+  final List<ExpressionObserver> arguments;
 
-  InvokeObserver(Expression expr, this.receiver, [this.arguments])
-      : super(expr);
-
-  bool get isGetter => _expr.isGetter;
+  InvokeObserver(Expression expr, this.receiver, this.arguments)
+      : super(expr) {
+    assert(arguments != null);
+  }
 
   String get method => _expr.method;
 
   _updateSelf(Scope scope) {
-    var args = (arguments == null)
-        ? []
-        : arguments.map((a) => a._value)
-            .toList(growable: false);
+    var args = arguments.map((a) => a._value).toList();
     var receiverValue = receiver._value;
     if (receiverValue == null) {
       _value = null;
-    } else if (_expr.method == null) {
-      if (_expr.isGetter) {
-        // getter, but not a top-level identifier
-        // TODO(justin): listen to the receiver's owner
-        _value = receiverValue;
-      } else {
-        // top-level function or model method
-        // TODO(justin): listen to model changes to see if the method has
-        // changed? listen to the scope to see if the top-level method has
-        // changed?
-        assert(receiverValue is Function);
-        _value = call(receiverValue, args);
-      }
+      return;
+    }
+    if (_expr.method == null) {
+      // top-level function or model method
+      // TODO(justin): listen to model changes to see if the method has
+      // changed? listen to the scope to see if the top-level method has
+      // changed?
+      assert(receiverValue is Function);
+      _value = _convert(Function.apply(receiverValue, args));
     } else {
-      // special case [] because we don't need mirrors
-      if (_expr.method == '[]') {
-        assert(args.length == 1);
-        var key = args[0];
-        _value = receiverValue[key];
+      var symbol = smoke.nameToSymbol(_expr.method);
+      _value = smoke.invoke(receiverValue, symbol, args);
 
-        if (receiverValue is Observable) {
-          _subscription = (receiverValue as Observable).changes.listen(
-              (List<ChangeRecord> changes) {
-                if (changes.any((c) =>
-                    c is MapChangeRecord && c.key == key)) {
-                  _invalidate(scope);
-                }
-              });
-        }
-      } else {
-        var mirror = reflect(receiverValue);
-        var symbol = new Symbol(_expr.method);
-        _value = (_expr.isGetter)
-            ? mirror.getField(symbol).reflectee
-            : mirror.invoke(symbol, args, null).reflectee;
-
-        if (receiverValue is Observable) {
-          _subscription = (receiverValue as Observable).changes.listen(
-              (List<ChangeRecord> changes) {
-                if (changes.any(
-                    (c) => c is PropertyChangeRecord && c.name == symbol)) {
-                  _invalidate(scope);
-                }
-              });
-        }
+      if (receiverValue is Observable) {
+        _subscription = (receiverValue as Observable).changes.listen(
+            (List<ChangeRecord> changes) {
+              if (changes.any(
+                  (c) => c is PropertyChangeRecord && c.name == symbol)) {
+                _invalidate(scope);
+              }
+            });
       }
     }
   }
@@ -573,74 +814,7 @@ class InvokeObserver extends ExpressionObserver<Invoke> implements Invoke {
   accept(Visitor v) => v.visitInvoke(this);
 }
 
-class InObserver extends ExpressionObserver<InExpression>
-    implements InExpression {
-  IdentifierObserver left;
-  ExpressionObserver right;
-
-  InObserver(Expression expr, this.left, this.right) : super(expr);
-
-  _updateSelf(Scope scope) {
-    Identifier identifier = left;
-    var iterable = right._value;
-
-    if (iterable is! Iterable && iterable != null) {
-      throw new EvalException("right side of 'in' is not an iterator");
-    }
-
-    if (iterable is ObservableList) {
-      _subscription = iterable.listChanges.listen((_) => _invalidate(scope));
-    }
-
-    // TODO: make Comprehension observable and update it
-    _value = new Comprehension(identifier.value, iterable);
-  }
-
-  accept(Visitor v) => v.visitInExpression(this);
-}
-
 _toBool(v) => (v == null) ? false : v;
-
-/** Call a [Function] or a [Method]. */
-// TODO(jmesserly): remove this once dartbug.com/13002 is fixed.
-// Just inline `_convert(Function.apply(...))` to the call site.
-Object call(Object receiver, List args) {
-  var result;
-  if (receiver is Method) {
-    Method method = receiver;
-    result = method.mirror.invoke(method.symbol, args, null).reflectee;
-  } else {
-    result = Function.apply(receiver, args, null);
-  }
-  return _convert(result);
-}
-
-/**
- * A comprehension declaration ("a in b"). [identifier] is the loop variable
- * that's added to the scope during iteration. [iterable] is the set of
- * objects to iterate over.
- */
-class Comprehension {
-  final String identifier;
-  final Iterable iterable;
-
-  Comprehension(this.identifier, Iterable iterable)
-      : iterable = (iterable != null) ? iterable : const [];
-}
-
-/** A method on a model object in a [Scope]. */
-class Method {
-  final InstanceMirror mirror;
-  final Symbol symbol;
-
-  Method(this.mirror, this.symbol);
-
-  /**
-   * Support for calling single argument methods like [Filter]s.
-   * This does not work for calls that need to pass more than one argument.
-   */
-  call(arg0) => mirror.invoke(symbol, [arg0], null).reflectee;
-}
 
 class EvalException implements Exception {
   final String message;

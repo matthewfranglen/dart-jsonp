@@ -39,7 +39,6 @@ class TokenKind {
   static const int DOUBLE_QUOTE = 26;           // "
   static const int SLASH = 27;                  // /
   static const int EQUALS = 28;                 // =
-  static const int OR = 29;                     // |
   static const int CARET = 30;                  // ^
   static const int DOLLAR = 31;                 // $
   static const int LESS = 32;                   // <
@@ -583,7 +582,7 @@ class TokenKind {
 
   /**
    * Match color name, case insensitive match and return the associated color
-   * entry from _EXTENDED_COLOR_NAMES list, return [null] if not found.
+   * entry from _EXTENDED_COLOR_NAMES list, return [:null:] if not found.
    */
   static Map matchColorName(String text) {
     var name = text.toLowerCase();
@@ -664,7 +663,6 @@ class TokenKind {
       case TokenKind.DOUBLE_QUOTE: return "\"";
       case TokenKind.SLASH: return "/";
       case TokenKind.EQUALS: return '=';
-      case TokenKind.OR: return '|';
       case TokenKind.CARET: return '^';
       case TokenKind.DOLLAR: return '\$';
       case TokenKind.LESS: return '<';

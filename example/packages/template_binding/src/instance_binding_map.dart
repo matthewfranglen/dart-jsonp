@@ -6,61 +6,82 @@ part of template_binding;
 
 class _InstanceBindingMap {
   final List bindings;
-  final List<_InstanceBindingMap> children;
-  final Node templateRef;
-  final bool hasSubTemplate;
+  List<_InstanceBindingMap> children;
+  DocumentFragment content;
 
-  _InstanceBindingMap._(this.bindings, this.children, this.templateRef,
-      this.hasSubTemplate);
+  bool get isTemplate => false;
 
-  factory _InstanceBindingMap(Node node, BindingDelegate delegate) {
-    var bindings = _getBindings(node, delegate);
+  _InstanceBindingMap(this.bindings);
 
-    bool hasSubTemplate = false;
-    Node templateRef = null;
-
-    if (isSemanticTemplate(node)) {
-      templateRef = node;
-      hasSubTemplate = true;
-    }
-
-    List children = null;
-    for (var c = node.firstChild, i = 0; c != null; c = c.nextNode, i++) {
-      var childMap = new _InstanceBindingMap(c, delegate);
-      if (childMap == null) continue;
-
-      if (children == null) children = new List(node.nodes.length);
-      children[i] = childMap;
-      if (childMap.hasSubTemplate) {
-        hasSubTemplate = true;
-      }
-    }
-
-    return new _InstanceBindingMap._(bindings, children, templateRef,
-        hasSubTemplate);
+  _InstanceBindingMap getChild(int index) {
+    if (children == null || index >= children.length) return null;
+    return children[index];
   }
 }
 
+class _TemplateBindingMap extends _InstanceBindingMap {
+  bool get isTemplate => true;
 
-void _addMapBindings(Node node, _InstanceBindingMap map, model,
-    BindingDelegate delegate, List bound) {
-  if (map == null) return;
+  MustacheTokens _if, _bind, _repeat;
 
-  if (map.templateRef != null) {
-    TemplateBindExtension.decorate(node, map.templateRef);
+  _TemplateBindingMap(List bindings) : super(bindings);
+}
+
+_InstanceBindingMap _createInstanceBindingMap(Node node,
+    BindingDelegate delegate) {
+
+  _InstanceBindingMap map = _getBindings(node, delegate);
+  if (map == null) map = new _InstanceBindingMap([]);
+
+  List children = null;
+  int index = 0;
+  for (var c = node.firstChild; c != null; c = c.nextNode, index++) {
+    var childMap = _createInstanceBindingMap(c, delegate);
+    if (childMap == null) continue;
+
+    // TODO(jmesserly): use a sparse map instead?
+    if (children == null) children = new List(node.nodes.length);
+    children[index] = childMap;
+  }
+  map.children = children;
+
+  return map;
+}
+
+Node _cloneAndBindInstance(Node node, Node parent, Document stagingDocument,
+    _InstanceBindingMap bindings, model, BindingDelegate delegate,
+    List instanceBindings, [TemplateInstance instanceRecord]) {
+
+  var clone = parent.append(stagingDocument.importNode(node, false));
+
+  int i = 0;
+  for (var c = node.firstChild; c != null; c = c.nextNode, i++) {
+    var childMap = bindings != null ? bindings.getChild(i) : null;
+    _cloneAndBindInstance(c, clone, stagingDocument, childMap, model, delegate,
+        instanceBindings);
+  }
+
+  if (bindings.isTemplate) {
+    TemplateBindExtension.decorate(clone, node);
     if (delegate != null) {
-      templateBindFallback(node)._bindingDelegate = delegate;
+      templateBindFallback(clone).bindingDelegate = delegate;
     }
   }
 
-  if (map.bindings != null) {
-    _processBindings(map.bindings, node, model, bound);
-  }
+  _processBindings(clone, bindings, model, instanceBindings);
+  return clone;
+}
 
-  if (map.children == null) return;
+// TODO(rafaelw): Setup a MutationObserver on content which clears the expando
+// so that bindingMaps regenerate when template.content changes.
+_getInstanceBindingMap(DocumentFragment content, BindingDelegate delegate) {
+  if (delegate == null) delegate = BindingDelegate._DEFAULT;
 
-  int i = 0;
-  for (var c = node.firstChild; c != null; c = c.nextNode) {
-    _addMapBindings(c, map.children[i++], model, delegate, bound);
+  if (delegate._bindingMaps == null) delegate._bindingMaps = new Expando();
+  var map = delegate._bindingMaps[content];
+  if (map == null) {
+    map = _createInstanceBindingMap(content, delegate);
+    delegate._bindingMaps[content] = map;
   }
+  return map;
 }

@@ -30,7 +30,6 @@ library polymer_expressions;
 import 'dart:async';
 import 'dart:html';
 
-import 'package:logging/logging.dart';
 import 'package:observe/observe.dart';
 import 'package:template_binding/template_binding.dart';
 
@@ -39,9 +38,6 @@ import 'expression.dart';
 import 'parser.dart';
 import 'src/globals.dart';
 
-final Logger _logger = new Logger('polymer_expressions');
-
-// TODO(justin): Investigate XSS protection
 Object _classAttributeConverter(v) =>
     (v is Map) ? v.keys.where((k) => v[k] == true).join(' ') :
     (v is Iterable) ? v.join(' ') :
@@ -56,93 +52,346 @@ class PolymerExpressions extends BindingDelegate {
   /** The default [globals] to use for Polymer expressions. */
   static const Map DEFAULT_GLOBALS = const { 'enumerate': enumerate };
 
+  final ScopeFactory _scopeFactory;
   final Map<String, Object> globals;
+
+  // allows access to scopes created for template instances
+  final Expando<Scope> _scopes = new Expando<Scope>();
+  // allows access to scope identifiers (for "in" and "as")
+  final Expando<String> _scopeIdents = new Expando<String>();
 
   /**
    * Creates a new binding delegate for Polymer expressions, with the provided
    * variables used as [globals]. If no globals are supplied, a copy of the
    * [DEFAULT_GLOBALS] will be used.
    */
-  PolymerExpressions({Map<String, Object> globals})
-      : globals = (globals == null) ?
-          new Map<String, Object>.from(DEFAULT_GLOBALS) : globals;
+  PolymerExpressions({Map<String, Object> globals,
+      ScopeFactory scopeFactory: const ScopeFactory()})
+      : globals = globals == null ?
+          new Map<String, Object>.from(DEFAULT_GLOBALS) : globals,
+          _scopeFactory = scopeFactory;
 
-  prepareBinding(String path, name, node) {
+  @override
+  PrepareBindingFunction prepareBinding(String path, name, Node boundNode) {
     if (path == null) return null;
     var expr = new Parser(path).parse();
 
-    // For template bind/repeat to an empty path, just pass through the model.
-    // We don't want to unwrap the Scope.
-    // TODO(jmesserly): a custom element extending <template> could notice this
-    // behavior. An alternative is to associate the Scope with the node via an
-    // Expando, which is what the JavaScript PolymerExpressions does.
-    if (isSemanticTemplate(node) && (name == 'bind' || name == 'repeat') &&
-        expr is EmptyExpression) {
-      return null;
+    if (isSemanticTemplate(boundNode) && (name == 'bind' || name == 'repeat')) {
+      if (expr is HasIdentifier) {
+        var identifier = expr.identifier;
+        var bindExpr = expr.expr;
+        return (model, Node node, bool oneTime) {
+          _scopeIdents[node] = identifier;
+          // model may not be a Scope if it was assigned directly via
+          // template.model = x; In that case, prepareInstanceModel will
+          // be called _after_ prepareBinding and will lookup this scope from
+          // _scopes
+          var scope = _scopes[node] = (model is Scope)
+              ? model
+              : _scopeFactory.modelScope(model: model, variables: globals);
+          return new _Binding(bindExpr, scope);
+        };
+      } else {
+        return (model, Node node, bool oneTime) {
+          var scope = _scopes[node] = (model is Scope)
+              ? model
+              : _scopeFactory.modelScope(model: model, variables: globals);
+          if (oneTime) {
+            return _Binding._oneTime(expr, scope);
+          }
+          return new _Binding(expr, scope);
+        };
+      }
     }
 
-    return (model, node) {
-      if (model is! Scope) {
-        model = new Scope(model: model, variables: globals);
+    // For regular bindings, not bindings on a template, the model is always
+    // a Scope created by prepareInstanceModel
+    _Converter converter = null;
+    if (boundNode is Element && name == 'class') {
+      converter = _classAttributeConverter;
+    } else if (boundNode is Element && name == 'style') {
+      converter = _styleAttributeConverter;
+    }
+
+    return (model, Node node, bool oneTime) {
+      var scope = _getScopeForModel(node, model);
+      if (oneTime) {
+        return _Binding._oneTime(expr, scope, converter);
       }
-      if (node is Element && name == "class") {
-        return new _Binding(expr, model, _classAttributeConverter);
-      }
-      if (node is Element && name == "style") {
-        return new _Binding(expr, model, _styleAttributeConverter);
-      }
-      return new _Binding(expr, model);
+      return new _Binding(expr, scope, converter);
     };
   }
 
-  prepareInstanceModel(Element template) => (model) =>
-      model is Scope ? model : new Scope(model: model, variables: globals);
+  prepareInstanceModel(Element template) {
+    var ident = _scopeIdents[template];
+
+    if (ident == null) {
+      return (model) {
+        var existingScope = _scopes[template];
+        // TODO (justinfagnani): make template binding always call
+        // prepareInstanceModel first and get rid of this check
+        if (existingScope != null) {
+          // If there's an existing scope, we created it in prepareBinding
+          // If it has the same model, then we can reuse it, otherwise it's
+          // a repeat with no identifier and we create new scope to occlude
+          // the outer one
+          if (model == existingScope.model) return existingScope;
+          return _scopeFactory.modelScope(model: model, variables: globals);
+        } else {
+          return _getScopeForModel(template, model);
+        }
+      };
+    }
+
+    return (model) {
+      var existingScope = _scopes[template];
+      if (existingScope != null) {
+        // This only happens when a model has been assigned programatically
+        // and prepareBinding is called _before_ prepareInstanceModel.
+        // The scope assigned in prepareBinding wraps the model and is the
+        // scope of the expression. That should be the parent of the templates
+        // scope in the case of bind/as or repeat/in bindings.
+        return _scopeFactory.childScope(existingScope, ident, model);
+      } else {
+        // If there's not an existing scope then we have a bind/as or
+        // repeat/in binding enclosed in an outer scope, so we use that as
+        // the parent
+        var parentScope = _getParentScope(template);
+        return _scopeFactory.childScope(parentScope, ident, model);
+      }
+    };
+  }
+
+  /**
+   * Gets an existing scope for use as a parent, but does not create a new one.
+   */
+  Scope _getParentScope(Node node) {
+    var parent = node.parentNode;
+    if (parent == null) return null;
+
+    if (isSemanticTemplate(node)) {
+      var templateExtension = templateBind(node);
+      var templateInstance = templateExtension.templateInstance;
+      var model = templateInstance == null
+          ? templateExtension.model
+          : templateInstance.model;
+      if (model is Scope) {
+        return model;
+      } else {
+        // A template with a bind binding might have a non-Scope model
+        return _scopes[node];
+      }
+    }
+    if (parent != null) return _getParentScope(parent);
+    return null;
+  }
+
+  /**
+   * Returns the Scope to be used to evaluate expressions in the template
+   * containing [node]. Since all expressions in the same template evaluate
+   * against the same model, [model] is passed in and checked against the
+   * template model to make sure they agree.
+   *
+   * For nested templates, we might have a binding on the nested template that
+   * should be evaluated in the context of the parent template. All scopes are
+   * retreived from an ancestor of [node], since node may be establishing a new
+   * Scope.
+   */
+  Scope _getScopeForModel(Node node, model) {
+    // This only happens in bindings_test because it calls prepareBinding()
+    // directly. Fix the test and throw if node is null?
+    if (node == null) {
+      return _scopeFactory.modelScope(model: model, variables: globals);
+    }
+
+    var id = node is Element ? node.id : '';
+    if (model is Scope) {
+      return model;
+    }
+    if (_scopes[node] != null) {
+      var scope = _scopes[node];
+      assert(scope.model == model);
+      return _scopes[node];
+    } else if (node.parentNode != null) {
+      return _getContainingScope(node.parentNode, model);
+    } else {
+      // here we should be at a top-level template, so there's no parent to
+      // look for a Scope on.
+      if (!isSemanticTemplate(node)) {
+        throw "expected a template instead of $node";
+      }
+      return _getContainingScope(node, model);
+    }
+  }
+
+  Scope _getContainingScope(Node node, model) {
+    if (isSemanticTemplate(node)) {
+      var templateExtension = templateBind(node);
+      var templateInstance = templateExtension.templateInstance;
+      var templateModel = templateInstance == null
+          ? templateExtension.model
+          : templateInstance.model;
+      assert(templateModel == model);
+      var scope = _scopes[node];
+      assert(scope != null);
+      assert(scope.model == model);
+      return scope;
+    } else if (node.parent == null) {
+      var scope = _scopes[node];
+      if (scope != null) {
+        assert(scope.model == model);
+      } else {
+        // only happens in bindings_test
+        scope = _scopeFactory.modelScope(model: model, variables: globals);
+      }
+      return scope;
+    } else {
+      return _getContainingScope(node.parentNode, model);
+    }
+  }
+
+  /// Parse the expression string and return an expression tree.
+  static Expression getExpression(String exprString) =>
+      new Parser(exprString).parse();
+
+  /// Determines the value of evaluating [expr] on the given [model] and returns
+  /// either its value or a binding for it. If [oneTime] is true, it direclty
+  /// returns the value. Otherwise, when [oneTime] is false, it returns a
+  /// [Bindable] that besides evaluating the expression, it will also react to
+  /// observable changes from the model and update the value accordingly.
+  static getBinding(Expression expr, model, {Map<String, Object> globals,
+      oneTime: false}) {
+    if (globals == null) globals = new Map.from(DEFAULT_GLOBALS);
+    var scope = model is Scope ? model
+        : new Scope(model: model, variables: globals);
+    return oneTime ? _Binding._oneTime(expr, scope)
+        : new _Binding(expr, scope);
+  }
 }
 
-class _Binding extends ChangeNotifier {
+typedef Object _Converter(Object);
+
+class _Binding extends Bindable {
   final Scope _scope;
-  final ExpressionObserver _expr;
-  final _converter;
+  final _Converter _converter;
+  final Expression _expr;
+
+  Function _callback;
+  StreamSubscription _sub;
+  ExpressionObserver _observer;
   var _value;
 
-  _Binding(Expression expr, Scope scope, [this._converter])
-      : _expr = observe(expr, scope),
-        _scope = scope {
-    _expr.onUpdate.listen(_setValue).onError((e) {
-      _logger.warning("Error evaluating expression '$_expr': ${e.message}");
-    });
+  _Binding(this._expr, this._scope, [this._converter]);
+
+  static Object _oneTime(Expression expr, Scope scope, [_Converter converter]) {
     try {
-      update(_expr, _scope);
-      _setValue(_expr.currentValue);
-    } on EvalException catch (e) {
-      _logger.warning("Error evaluating expression '$_expr': ${e.message}");
+      var value = eval(expr, scope);
+      return (converter == null) ? value : converter(value);
+    } catch (e, s) {
+      new Completer().completeError(
+          "Error evaluating expression '$expr': $e", s);
     }
+    return null;
   }
 
-  _setValue(v) {
+  bool _convertAndCheck(newValue, {bool skipChanges: false}) {
     var oldValue = _value;
-    if (v is Comprehension) {
-      // convert the Comprehension into a list of scopes with the loop
-      // variable added to the scope
-      _value = v.iterable.map((i) {
-        var vars = new Map();
-        vars[v.identifier] = i;
-        Scope childScope = new Scope(parent: _scope, variables: vars);
-        return childScope;
-      }).toList(growable: false);
-    } else {
-      _value = (_converter == null) ? v : _converter(v);
+    _value = _converter == null ? newValue : _converter(newValue);
+
+    if (!skipChanges && _callback != null && oldValue != _value) {
+      _callback(_value);
+      return true;
     }
-    notifyPropertyChange(#value, oldValue, _value);
+    return false;
   }
 
-  @reflectable get value => _value;
+  get value {
+    // if there's a callback, then _value has been set, if not we need to
+    // force an evaluation
+    if (_callback != null) {
+      _check(skipChanges: true);
+      return _value;
+    }
+    return _Binding._oneTime(_expr, _scope, _converter);
+  }
 
-  @reflectable set value(v) {
+  set value(v) {
     try {
-      assign(_expr, v, _scope);
-    } on EvalException catch (e) {
-      _logger.warning("Error evaluating expression '$_expr': ${e.message}");
+      assign(_expr, v, _scope, checkAssignability: false);
+    } catch (e, s) {
+      new Completer().completeError(
+          "Error evaluating expression '$_expr': $e", s);
     }
   }
+
+  Object open(callback(value)) {
+    if (_callback != null) throw new StateError('already open');
+
+    _callback = callback;
+    _observer = observe(_expr, _scope);
+    _sub = _observer.onUpdate.listen(_convertAndCheck)..onError((e, s) {
+      new Completer().completeError(
+          "Error evaluating expression '$_observer': $e", s);
+    });
+
+    _check(skipChanges: true);
+    return _value;
+  }
+
+  bool _check({bool skipChanges: false}) {
+    try {
+      update(_observer, _scope, skipChanges: skipChanges);
+      return _convertAndCheck(_observer.currentValue, skipChanges: skipChanges);
+    } catch (e, s) {
+      new Completer().completeError(
+          "Error evaluating expression '$_observer': $e", s);
+      return false;
+    }
+  }
+
+  void close() {
+    if (_callback == null) return;
+
+    _sub.cancel();
+    _sub = null;
+    _callback = null;
+
+    new Closer().visit(_observer);
+    _observer = null;
+  }
+
+
+  // TODO(jmesserly): the following code is copy+pasted from path_observer.dart
+  // What seems to be going on is: polymer_expressions.dart has its own _Binding
+  // unlike polymer-expressions.js, which builds on CompoundObserver.
+  // This can lead to subtle bugs and should be reconciled. I'm not sure how it
+  // should go, but CompoundObserver does have some nice optimizations around
+  // ObservedSet which are lacking here. And reuse is nice.
+  void deliver() {
+    if (_callback != null) _dirtyCheck();
+  }
+
+  bool _dirtyCheck() {
+    var cycles = 0;
+    while (cycles < _MAX_DIRTY_CHECK_CYCLES && _check()) {
+      cycles++;
+    }
+    return cycles > 0;
+  }
+
+  static const int _MAX_DIRTY_CHECK_CYCLES = 1000;
+}
+
+_identity(x) => x;
+
+/**
+ * Factory function used for testing.
+ */
+class ScopeFactory {
+  const ScopeFactory();
+  modelScope({Object model, Map<String, Object> variables}) =>
+      new Scope(model: model, variables: variables);
+
+  childScope(Scope parent, String name, Object value) =>
+      parent.childScope(name, value);
 }

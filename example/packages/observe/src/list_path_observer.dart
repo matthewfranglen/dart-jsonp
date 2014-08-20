@@ -11,14 +11,12 @@ import 'package:observe/observe.dart';
 // https://raw.github.com/rafaelw/ChangeSummary/master/util/array_reduction.js
 // The main difference is we support anything on the rich Dart Iterable API.
 
-/**
- * Observes a path starting from each item in the list.
- */
+/// Observes a path starting from each item in the list.
+@deprecated
 class ListPathObserver<E, P> extends ChangeNotifier {
   final ObservableList<E> list;
   final String _itemPath;
   final List<PathObserver> _observers = <PathObserver>[];
-  final List<StreamSubscription> _subs = <StreamSubscription>[];
   StreamSubscription _sub;
   bool _scheduled = false;
   Iterable<P> _value;
@@ -42,8 +40,8 @@ class ListPathObserver<E, P> extends ChangeNotifier {
 
   void dispose() {
     if (_sub != null) _sub.cancel();
-    _subs.forEach((s) => s.cancel());
-    _subs.clear();
+    _observers.forEach((o) => o.close());
+    _observers.clear();
   }
 
   void _reduce() {
@@ -62,16 +60,14 @@ class ListPathObserver<E, P> extends ChangeNotifier {
     if (lengthAdjust > 0) {
       for (int i = 0; i < lengthAdjust; i++) {
         int len = _observers.length;
-        var pathObs = new PathObserver(list, '$len.$_itemPath');
-        _subs.add(pathObs.changes.listen(_scheduleReduce));
+        var pathObs = new PathObserver(list, '[$len].$_itemPath');
+        pathObs.open(_scheduleReduce);
         _observers.add(pathObs);
       }
     } else if (lengthAdjust < 0) {
       for (int i = 0; i < -lengthAdjust; i++) {
-        _subs.removeLast().cancel();
+        _observers.removeLast().close();
       }
-      int len = _observers.length;
-      _observers.removeRange(len + lengthAdjust, len);
     }
   }
 }

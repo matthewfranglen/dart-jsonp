@@ -2,13 +2,11 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-/**
- * A test configuration that generates a compact 1-line progress bar. The bar is
- * updated in-place before and after each test is executed. If all test pass,
- * you should only see a couple lines in the terminal. If a test fails, the
- * failure is shown and the progress bar continues to be updated below it.
- */
-library compact_vm_config;
+/// A test configuration that generates a compact 1-line progress bar. The bar
+/// is updated in-place before and after each test is executed. If all tests
+/// pass, only a couple of lines are printed in the terminal. If a test fails,
+/// the failure is shown and the progress bar continues to be updated below it.
+library unittest.compact_vm_config;
 
 import 'dart:async';
 import 'dart:io';
@@ -30,8 +28,10 @@ class CompactVMConfiguration extends VMConfiguration {
   ReceivePort _receivePort;
 
   DateTime _start;
-  int _pass = 0;
-  int _fail = 0;
+  Set<int> _passing = new Set();
+  Set<int> _failing = new Set();
+  int get _pass => _passing.length;
+  int get _fail => _failing.length;
 
   void onInit() {
     _receivePort = new ReceivePort();
@@ -45,25 +45,39 @@ class CompactVMConfiguration extends VMConfiguration {
 
   void onTestStart(TestCase test) {
     super.onTestStart(test);
-    _progressLine(_start, _pass, _fail, test.description);
+    _progressLine(test.description);
   }
 
   void onTestResult(TestCase test) {
     super.onTestResult(test);
     if (test.result == PASS) {
-      _pass++;
-      _progressLine(_start, _pass, _fail, test.description);
+      _passing.add(test.id);
+      _progressLine(test.description);
     } else {
-      _fail++;
-      _progressLine(_start, _pass, _fail, test.description);
-      print('');
+      _failing.add(test.id);
+      _progressLine(test.description);
+      _print();
       if (test.message != '') {
-        print(indent(test.message));
+        _print(indent(test.message));
       }
 
       if (test.stackTrace != null) {
-        print(indent(test.stackTrace.toString()));
+        _print(indent(test.stackTrace.toString()));
       }
+    }
+  }
+
+  void onTestResultChanged(TestCase test) {
+    _passing.remove(test.id);
+    _failing.add(test.id);
+    _progressLine(test.description);
+    _print();
+    if (test.message != '') {
+      _print(indent(test.message));
+    }
+
+    if (test.stackTrace != null) {
+      _print(indent(test.stackTrace.toString()));
     }
   }
 
@@ -80,18 +94,18 @@ class CompactVMConfiguration extends VMConfiguration {
       String uncaughtError) {
     var success = false;
     if (passed == 0 && failed == 0 && errors == 0 && uncaughtError == null) {
-      print('\nNo tests ran.');
+      _print('\nNo tests ran.');
     } else if (failed == 0 && errors == 0 && uncaughtError == null) {
-      _progressLine(_start, _pass, _fail, 'All tests passed!', _NONE);
-      print('');
+      _progressLine('All tests passed!', _NONE);
+      _print();
       success = true;
     } else {
-      _progressLine(_start, _pass, _fail, 'Some tests failed.', _RED);
-      print('');
+      _progressLine('Some tests failed.', _RED);
+      _print();
       if (uncaughtError != null) {
-        print('Top-level uncaught error: $uncaughtError');
+        _print('Top-level uncaught error: $uncaughtError');
       }
-      print('$passed PASSED, $failed FAILED, $errors ERRORS');
+      _print('$passed PASSED, $failed FAILED, $errors ERRORS');
     }
   }
 
@@ -99,20 +113,19 @@ class CompactVMConfiguration extends VMConfiguration {
 
   final int _nonVisiblePrefix = 1 + _GREEN.length + _NONE.length;
 
-  void _progressLine(DateTime startTime, int passed, int failed, String message,
-      [String color = _NONE]) {
-    var duration = (new DateTime.now()).difference(startTime);
+  void _progressLine(String message, [String color = _NONE]) {
+    var duration = (new DateTime.now()).difference(_start);
     var buffer = new StringBuffer();
     // \r moves back to the beginning of the current line.
     buffer.write('\r${_timeString(duration)} ');
     buffer.write(_GREEN);
     buffer.write('+');
-    buffer.write(passed);
+    buffer.write(_pass);
     buffer.write(_NONE);
-    if (failed != 0) {
+    if (_fail != 0) {
       buffer.write(_RED);
       buffer.write(' -');
-      buffer.write(failed);
+      buffer.write(_fail);
       buffer.write(_NONE);
     }
     buffer.write(': ');
@@ -122,7 +135,7 @@ class CompactVMConfiguration extends VMConfiguration {
     // sequences too. Because these sequences are not visible characters, we
     // make sure they are not counted towards the limit.
     int nonVisible = _nonVisiblePrefix + color.length  +
-        (failed != 0 ? (_RED.length + _NONE.length) : 0);
+        (_fail != 0 ? (_RED.length + _NONE.length) : 0);
     int len = buffer.length - nonVisible;
     var mx = MAX_LINE - len;
     buffer.write(_snippet(message, MAX_LINE - len));
@@ -187,10 +200,13 @@ class CompactVMConfiguration extends VMConfiguration {
   }
 }
 
+// TODO(sigmund): delete when dartbug.com/17269 is fixed (use `print` instead).
+_print([value = '']) => stdout.write('$value\n');
+
 void useCompactVMConfiguration() {
   // If the test is running on the Dart buildbots, we don't want to use this
   // config since it's output may not be what the bots expect.
-  if (Platform.environment.containsKey('BUILDBOT_BUILDERNAME')) {
+  if (Platform.environment['LOGNAME'] == 'chrome-bot') {
     return;
   }
 

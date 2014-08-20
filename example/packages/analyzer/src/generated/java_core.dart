@@ -2,9 +2,18 @@ library java.core;
 
 import "dart:math" as math;
 
+final Stopwatch nanoTimeStopwatch = new Stopwatch();
+
 class JavaSystem {
   static int currentTimeMillis() {
     return (new DateTime.now()).millisecondsSinceEpoch;
+  }
+
+  static int nanoTime() {
+    if (!nanoTimeStopwatch.isRunning) {
+      nanoTimeStopwatch.start();
+    }
+    return nanoTimeStopwatch.elapsedMicroseconds * 1000;
   }
 
   static void arraycopy(List src, int srcPos, List dest, int destPos, int length) {
@@ -14,74 +23,11 @@ class JavaSystem {
   }
 }
 
-/**
- * Limited implementation of "o is instanceOfType", see
- * http://code.google.com/p/dart/issues/detail?id=8184
- */
-bool isInstanceOf(o, Type t) {
-  if (o == null) {
-    return false;
-  }
-  if (o.runtimeType == t) {
-    return true;
-  }
-  String oTypeName = o.runtimeType.toString();
-  String tTypeName = t.toString();
-  if (oTypeName == tTypeName) {
-    return true;
-  }
-  if (oTypeName.startsWith("List") && tTypeName == "List") {
-    return true;
-  }
-  if (tTypeName == "Map" && o is Map) {
-    return true;
-  }
-  // Dart Analysis Engine specific
-  if (oTypeName == "${tTypeName}Impl") {
-    return true;
-  }
-  if (tTypeName == "FormalParameter") {
-    return
-        oTypeName == "DefaultFormalParameter" ||
-        oTypeName == "FieldNormalParameter" ||
-        oTypeName == "FunctionTypedFormalParameter" ||
-        oTypeName == "SimpleFormalParameter";
-  }
-  if (tTypeName == "MethodElement") {
-    if (oTypeName == "MethodMember") {
-      return true;
-    }
-  }
-  if (tTypeName == "ExecutableElement") {
-    if (oTypeName == "MethodElementImpl" ||
-        oTypeName == "FunctionElementImpl" ||
-        oTypeName == "PropertyAccessorElementImpl") {
-      return true;
-    }
-  }
-  if (tTypeName == "ParameterElement") {
-    if (oTypeName == "FieldFormalParameterElementImpl" ||
-        oTypeName == "DefaultFieldFormalParameterElementImpl" ||
-        oTypeName == "DefaultParameterElementImpl") {
-      return true;
-    }
-  }
-  if (tTypeName == "VariableElement") {
-    if (oTypeName == "LocalVariableElementImpl" ||
-        oTypeName == "ConstLocalVariableElementImpl" ||
-        oTypeName == "FieldElementImpl" ||
-        oTypeName == "ConstFieldElementImpl" ||
-        oTypeName == "TopLevelVariableElementImpl" ||
-        oTypeName == "ConstTopLevelVariableElementImpl") {
-      return true;
-    }
-  }
-  // no
-  return false;
-}
-
 class JavaArrays {
   static bool equals(List a, List b) {
+    if (identical(a, b)) {
+      return true;
+    }
     if (a.length != b.length) {
       return false;
     }
@@ -112,11 +58,32 @@ class Character {
   static const int MIN_SUPPLEMENTARY_CODE_POINT = 0x010000;
   static const int MIN_LOW_SURROGATE  = 0xDC00;
   static const int MIN_HIGH_SURROGATE = 0xD800;
+  static bool isDigit(int c) {
+    return c >= 0x30 && c <= 0x39;
+  }
   static bool isLetter(int c) {
     return c >= 0x41 && c <= 0x5A || c >= 0x61 && c <= 0x7A;
   }
   static bool isLetterOrDigit(int c) {
-    return isLetter(c) || c >= 0x30 && c <= 0x39;
+    return isLetter(c) || isDigit(c);
+  }
+  static bool isLowerCase(int c) {
+    return c >= 0x61 && c <= 0x7A;
+  }
+  static bool isUpperCase(int c) {
+    return c >= 0x41 && c <= 0x5A;
+  }
+  static int toLowerCase(int c) {
+    if (c >= 0x41 && c <= 0x5A) {
+      return 0x61 + (c - 0x41);
+    }
+    return c;
+  }
+  static int toUpperCase(int c) {
+    if (c >= 0x61 && c <= 0x7A) {
+      return 0x41 + (c - 0x61);
+    }
+    return c;
   }
   static bool isWhitespace(int c) {
     return c == 0x09 || c == 0x20 || c == 0x0A || c == 0x0D;
@@ -262,14 +229,70 @@ class PrintStringWriter extends PrintWriter {
 }
 
 class StringUtils {
-  static List<String> split(String s, String pattern) => s.split(pattern);
-  static String replace(String s, String from, String to) => s.replaceAll(from, to);
+  static String capitalize(String str) {
+    if (isEmpty(str)) {
+      return str;
+    }
+    return str.substring(0, 1).toUpperCase() + str.substring(1);
+  }
+
+  static bool equals(String cs1, String cs2) {
+    if (cs1 == cs2) {
+      return true;
+    }
+    if (cs1 == null || cs2 == null) {
+      return false;
+    }
+    return cs1 == cs2;
+  }
+
+  static bool isEmpty(String str) {
+    return str == null || str.isEmpty;
+  }
+
+  static String join(Iterable iter, [String separator = ' ', int start = 0, int
+      end = -1]) {
+    if (start != 0) {
+      iter = iter.skip(start);
+    }
+    if (end != -1) {
+      iter = iter.take(end - start);
+    }
+    return iter.join(separator);
+  }
+
+  static String remove(String str, String remove) {
+    if (isEmpty(str) || isEmpty(remove)) {
+      return str;
+    }
+    return str.replaceAll(remove, '');
+  }
+
+  static String removeStart(String str, String remove) {
+    if (isEmpty(str) || isEmpty(remove)) {
+      return str;
+    }
+    if (str.startsWith(remove)) {
+      return str.substring(remove.length);
+    }
+    return str;
+  }
+
   static String repeat(String s, int n) {
     StringBuffer sb = new StringBuffer();
     for (int i = 0; i < n; i++) {
       sb.write(s);
     }
     return sb.toString();
+  }
+
+  static List<String> split(String s, [String pattern = '']) {
+    return s.split(pattern);
+  }
+
+  static List<String> splitByWholeSeparatorPreserveAllTokens(String s, String
+      pattern) {
+    return s.split(pattern);
   }
 }
 
@@ -308,7 +331,11 @@ class IllegalStateException extends JavaException {
 }
 
 class UnsupportedOperationException extends JavaException {
-  String toString() => "UnsupportedOperationException";
+  UnsupportedOperationException([message = ""]) : super(message);
+}
+
+class NoSuchElementException extends JavaException {
+  String toString() => "NoSuchElementException";
 }
 
 class NumberFormatException extends JavaException {
@@ -401,14 +428,6 @@ javaListSet(List list, int index, newValue) {
   return oldValue;
 }
 
-bool javaSetAdd(Set s, o) {
-  if (!s.contains(o)) {
-    s.add(o);
-    return true;
-  }
-  return false;
-}
-
 bool javaCollectionContainsAll(Iterable list, Iterable c) {
   return c.fold(true, (bool prev, e) => prev && list.contains(e));
 }
@@ -417,12 +436,6 @@ javaMapPut(Map target, key, value) {
   var oldValue = target[key];
   target[key] = value;
   return oldValue;
-}
-
-void javaMapPutAll(Map target, Map source) {
-  source.forEach((k, v) {
-    target[k] = v;
-  });
 }
 
 bool javaStringEqualsIgnoreCase(String a, String b) {
@@ -445,6 +458,10 @@ bool javaBooleanOr(bool a, bool b) {
 
 bool javaBooleanAnd(bool a, bool b) {
   return a && b;
+}
+
+int javaByte(Object o) {
+  return (o as int) & 0xFF;
 }
 
 class JavaStringBuilder {
@@ -482,7 +499,7 @@ abstract class Enum<E extends Enum> implements Comparable<E> {
   final String name;
   /// The position in the enum declaration.
   final int ordinal;
-  Enum(this.name, this.ordinal);
+  const Enum(this.name, this.ordinal);
   int get hashCode => ordinal;
   String toString() => name;
   int compareTo(E other) => ordinal - other.ordinal;

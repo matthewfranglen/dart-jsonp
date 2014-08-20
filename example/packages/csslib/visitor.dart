@@ -4,7 +4,7 @@
 
 library csslib.visitor;
 
-import 'package:source_maps/span.dart' show Span;
+import 'package:source_span/source_span.dart';
 import 'parser.dart';
 
 part 'src/css_printer.dart';
@@ -111,7 +111,7 @@ abstract class VisitorBase {
 /** Base vistor class for the style sheet AST. */
 class Visitor implements VisitorBase {
   /** Helper function to walk a list of nodes. */
-  void _visitNodeList(list) {
+  void _visitNodeList(List<TreeNode> list) {
     // Don't use iterable otherwise the list can't grow while using Visitor.
     // It certainly can't have items deleted before the index being iterated
     // but items could be added after the index.
@@ -180,7 +180,7 @@ class Visitor implements VisitorBase {
   }
 
   void visitKeyFrameDirective(KeyFrameDirective node) {
-    visitIdentifier(node._name);
+    visitIdentifier(node.name);
     _visitNodeList(node._blocks);
   }
 
@@ -194,7 +194,7 @@ class Visitor implements VisitorBase {
   }
 
   void visitStyletDirective(StyletDirective node) {
-    _visitNodeList(node._rulesets);
+    _visitNodeList(node.rulesets);
   }
 
   void visitNamespaceDirective(NamespaceDirective node) { }
@@ -230,7 +230,7 @@ class Visitor implements VisitorBase {
   }
 
   void visitDeclarationGroup(DeclarationGroup node) {
-    _visitNodeList(node._declarations);
+    _visitNodeList(node.declarations);
   }
 
   void visitMarginGroup(MarginGroup node) => visitDeclarationGroup(node);
@@ -258,49 +258,20 @@ class Visitor implements VisitorBase {
   }
 
   void visitSelector(Selector node) {
-    _visitNodeList(node._simpleSelectorSequences);
+    _visitNodeList(node.simpleSelectorSequences);
   }
 
   void visitSimpleSelectorSequence(SimpleSelectorSequence node) {
-    var selector = node._selector;
-    if (selector is NamespaceSelector) {
-      visitNamespaceSelector(selector);
-    } else if (selector is ElementSelector) {
-      visitElementSelector(selector);
-    } else if (selector is IdSelector) {
-      visitIdSelector(selector);
-    } else if (selector is ClassSelector) {
-      visitClassSelector(selector);
-    } else if (selector is PseudoClassFunctionSelector) {
-      visitPseudoClassFunctionSelector(selector);
-    } else if (selector is PseudoElementFunctionSelector) {
-      visitPseudoElementFunctionSelector(selector);
-    } else if (selector is PseudoClassSelector) {
-      visitPseudoClassSelector(selector);
-    } else if (selector is PseudoElementSelector) {
-      visitPseudoElementSelector(selector);
-    } else if (selector is NegationSelector) {
-      visitNegationSelector(selector);
-    } else if (selector is SelectorExpression) {
-      visitSelectorExpression(selector);
-    } else if (selector is AttributeSelector) {
-      visitAttributeSelector(selector);
-    } else {
-      visitSimpleSelector(selector);
-    }
+    node.simpleSelector.visit(this);
   }
 
   void visitSimpleSelector(SimpleSelector node) => node._name.visit(this);
 
   void visitNamespaceSelector(NamespaceSelector node) {
-    var namespace = node._namespace;
-    if (namespace is Identifier) {
-      visitIdentifier(namespace);
-    } else if (namespace is Wildcard) {
-      visitWildcard(namespace);
+    if (node._namespace != null) node._namespace.visit(this);
+    if (node.nameAsSimpleSelector != null) {
+      node.nameAsSimpleSelector.visit(this);
     }
-
-    visitSimpleSelector(node.nameAsSimpleSelector);
   }
 
   void visitElementSelector(ElementSelector node) => visitSimpleSelector(node);
@@ -329,7 +300,7 @@ class Visitor implements VisitorBase {
       visitSimpleSelector(node);
 
   void visitSelectorExpression(SelectorExpression node) {
-    _visitNodeList(node._expressions);
+    _visitNodeList(node.expressions);
   }
 
   void visitUnicodeRangeTerm(UnicodeRangeTerm node) { }

@@ -7,9 +7,12 @@ library source_maps.span;
 
 import 'dart:math' show min, max;
 
+import 'package:path/path.dart' as p;
+
 import 'src/utils.dart';
 
 /// A simple class that describe a segment of source text.
+@Deprecated("Use the source_span package instead.")
 abstract class Span implements Comparable {
   /// The start location of this span.
   final Location start;
@@ -62,7 +65,10 @@ abstract class Span implements Comparable {
 
   String getLocationMessage(String message,
       {bool useColors: false, String color}) {
-    return '$formatLocation: $message';
+    var source = start.sourceUrl == null ? '' :
+        ' of ${p.prettyUri(start.sourceUrl)}';
+    return 'line ${start.line + 1}, column ${start.column + 1}$source: ' +
+        message;
   }
 
   bool operator ==(Span other) =>
@@ -74,6 +80,7 @@ abstract class Span implements Comparable {
 }
 
 /// A location in the source text
+@Deprecated("Use the source_span package instead.")
 abstract class Location implements Comparable {
   /// Url of the source containing this span.
   String get sourceUrl;
@@ -108,6 +115,7 @@ abstract class Location implements Comparable {
 }
 
 /// Implementation of [Location] with fixed values given at allocation time.
+@Deprecated("Use the source_span package instead.")
 class FixedLocation extends Location {
   final String sourceUrl;
   final int line;
@@ -118,6 +126,7 @@ class FixedLocation extends Location {
 }
 
 /// Implementation of [Span] where all the values are given at allocation time.
+@Deprecated("Use the source_span package instead.")
 class FixedSpan extends Span {
   /// The source text for this span, if available.
   final String text;
@@ -132,6 +141,7 @@ class FixedSpan extends Span {
 }
 
 /// [Location] with values computed from an underling [SourceFile].
+@Deprecated("Use the source_span package instead.")
 class FileLocation extends Location {
   /// The source file containing this location.
   final SourceFile file;
@@ -144,6 +154,7 @@ class FileLocation extends Location {
 }
 
 /// [Span] where values are computed from an underling [SourceFile].
+@Deprecated("Use the source_span package instead.")
 class FileSpan extends Span {
   /// The source file containing this span.
   final SourceFile file;
@@ -190,6 +201,7 @@ const String _NO_COLOR = '\u001b[0m';
 /// Stores information about a source file, to permit computation of the line
 /// and column. Also contains a nice default error message highlighting the code
 /// location.
+@Deprecated("Use the source_span package instead.")
 class SourceFile {
   /// Url where the source file is located.
   final String url;
@@ -252,8 +264,8 @@ class SourceFile {
     var line = getLine(start);
     var column = getColumn(line, start);
 
-    var src = url == null ? '' : url;
-    var msg = '$src:${line + 1}:${column + 1}: $message';
+    var source = url == null ? '' : ' of ${p.prettyUri(url)}';
+    var msg = 'line ${line + 1}, column ${column + 1}$source: $message';
 
     if (_decodedChars == null) {
       // We don't have any text to include, so exit.
@@ -301,6 +313,7 @@ class SourceFile {
 /// allows you to set source-map locations based on the locations relative to
 /// the start of the segment, but that get translated to absolute locations in
 /// the original source file.
+@Deprecated("Use the source_span package instead.")
 class SourceFileSegment extends SourceFile {
   final int _baseOffset;
   final int _baseLine;
@@ -357,4 +370,35 @@ class SourceFileSegment extends SourceFile {
   /// messages can be reported accurately.
   String getText(int start, [int end]) =>
     super.getText(start - _baseOffset, end == null ? null : end - _baseOffset);
+}
+
+/// A class for exceptions that have source span information attached.
+@Deprecated("Use the source_span package instead.")
+class SpanException implements Exception {
+  /// A message describing the exception.
+  final String message;
+
+  /// The span associated with this exception.
+  ///
+  /// This may be `null` if the source location can't be determined.
+  final Span span;
+
+  SpanException(this.message, this.span);
+
+  String toString({bool useColors: false, String color}) {
+    if (span == null) return message;
+    return "Error on " + span.getLocationMessage(message,
+        useColors: useColors, color: color);
+  }
+}
+
+/// A [SpanException] that's also a [FormatException].
+@Deprecated("Use the source_span package instead.")
+class SpanFormatException extends SpanException implements FormatException {
+  final source;
+
+  SpanFormatException(String message, Span span, [this.source])
+      : super(message, span);
+
+  int get offset => span == null ? null : span.start.offset;
 }

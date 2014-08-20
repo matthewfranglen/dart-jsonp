@@ -4,217 +4,145 @@
 
 part of polymer;
 
-/** Annotation used to automatically register polymer elements. */
+/// Annotation used to automatically register polymer elements.
 class CustomTag {
   final String tagName;
   const CustomTag(this.tagName);
 }
 
-/**
- * Metadata used to label static or top-level methods that are called
- * automatically when loading the library of a custom element.
- */
-const initMethod = const _InitMethodAnnotation();
+/// Metadata used to label static or top-level methods that are called
+/// automatically when loading the library of a custom element.
+const initMethod = const InitMethodAnnotation();
 
-/**
- * Initializes a polymer application as follows:
- *   * set up up polling for observable changes
- *   * initialize Model-Driven Views
- *   * Include some style to prevent flash of unstyled content (FOUC)
- *   * for each library in [libraries], register custom elements labeled with
- *      [CustomTag] and invoke the initialization method on it. If [libraries]
- *      is null, first find all libraries that need to be loaded by scanning for
- *      HTML imports in the main document.
- *
- * The initialization on each library is a top-level function and annotated with
- * [initMethod].
- *
- * The urls in [libraries] can be absolute or relative to
- * `currentMirrorSystem().isolate.rootLibrary.uri`.
- */
+/// Implementation behind [initMethod]. Only exposed for internal implementation
+/// details
+class InitMethodAnnotation {
+  const InitMethodAnnotation();
+}
+
+/// Initializes a polymer application as follows:
+///   * if running in development mode, set up a dirty-checking zone that polls
+///     for observable changes
+///   * initialize template binding and polymer-element
+///   * for each library included transitively from HTML and HTML imports,
+///   register custom elements declared there (labeled with [CustomTag]) and
+///   invoke the initialization method on it (top-level functions annotated with
+///   [initMethod]).
 Zone initPolymer() {
-  if (_useDirtyChecking) {
-    return dirtyCheckZone()..run(_initPolymerOptimized);
+  if (loader.deployMode) {
+    startPolymer(loader.initializers, loader.deployMode);
+    return Zone.current;
+  }
+  return dirtyCheckZone()..run(
+      () => startPolymer(loader.initializers, loader.deployMode));
+}
+
+/// True if we're in deployment mode.
+bool _deployMode = false;
+
+bool _startPolymerCalled = false;
+
+/// Starts polymer by running all [initializers] and hooking the polymer.js
+/// code. **Note**: this function is not meant to be invoked directly by
+/// application developers. It is invoked either by [initPolymer] or, if you are
+/// using the experimental bootstrap API, this would be invoked by an entry
+/// point that is automatically generated somehow. In particular, during
+/// development, the entry point would be generated dynamically in `boot.js`.
+/// Similarly, pub-build would generate the entry point for deployment.
+void startPolymer(List<Function> initializers, [bool deployMode = true]) {
+  if (_startPolymerCalled) throw 'Initialization was already done.';
+  _startPolymerCalled = true;
+  _hookJsPolymer();
+  _deployMode = deployMode;
+
+  if (initializers == null) {
+    throw 'Missing initialization of polymer elements. '
+        'Please check that the list of entry points in your pubspec.yaml '
+        'is correct. If you are using pub-serve, you may need to restart it.';
   }
 
-  _initPolymerOptimized();
-  return Zone.current;
+  Polymer.registerSync('auto-binding-dart', AutoBindingElement,
+      extendsTag: 'template');
+
+  for (var initializer in initializers) {
+    initializer();
+  }
 }
 
-/**
- * Same as [initPolymer], but runs the version that is optimized for deployment
- * to the internet. The biggest difference is it omits the [Zone] that
- * automatically invokes [Observable.dirtyCheck], and the list of libraries must
- * be supplied instead of being dynamically searched for at runtime.
- */
-// TODO(jmesserly): change the Polymer build step to call this directly.
-void _initPolymerOptimized() {
-  document.register(PolymerDeclaration._TAG, PolymerDeclaration);
-
-  _loadLibraries();
-
-  // Run this after user code so they can add to Polymer.veiledElements
-  _preventFlashOfUnstyledContent();
-
-  customElementsReady.then((_) => Polymer._ready.complete());
+/// Configures [initPolymer] making it optimized for deployment to the internet.
+/// With this setup the initializer list is supplied instead of searched for
+/// at runtime. Additionally, after this method is called [initPolymer] omits
+/// the [Zone] that automatically invokes [Observable.dirtyCheck].
+void configureForDeployment(List<Function> initializers) {
+  loader.initializers = initializers;
+  loader.deployMode = true;
 }
 
-/**
- * Configures [initPolymer] making it optimized for deployment to the internet.
- * With this setup the list of libraries to initialize is supplied instead of
- * being dynamically searched for at runtime. Additionally, after this method is
- * called, [initPolymer] omits the [Zone] that automatically invokes
- * [Observable.dirtyCheck].
- */
-void configureForDeployment(List<String> libraries) {
-  _librariesToLoad = libraries;
-  _useDirtyChecking = false;
-}
+/// To ensure Dart can interoperate with polymer-element registered by
+/// polymer.js, we need to be able to execute Dart code if we are registering
+/// a Dart class for that element. We trigger Dart logic by patching
+/// polymer-element's register function and:
+///
+/// * if it has a Dart class, run PolymerDeclaration's register.
+/// * otherwise it is a JS prototype, run polymer-element's normal register.
+void _hookJsPolymer() {
+  // Note: platform.js is not used directly here, but we check that it is loaded
+  // to provide a good error message in Dartium if people forgot to include it.
+  // Otherwise, polymer.js below will fail with a hard to understand error
+  // message.
+  var platform = js.context['Platform'];
+  if (platform == null) {
+    throw new StateError('platform.js, dart_support.js must be loaded at'
+        ' the top of your application, before any other scripts or HTML'
+        ' imports that use polymer. Putting these two script tags at the top of'
+        ' your <head> element should address this issue:'
+        ' <script src="packages/web_components/platform.js"></script> and '
+        ' <script src="packages/web_components/dart_support.js"></script>.');
+  }
+  var polymerJs = js.context['Polymer'];
+  if (polymerJs == null) {
+    throw new StateError('polymer.js must be loaded before polymer.dart, please'
+        ' add <link rel="import" href="packages/polymer/polymer.html"> to your'
+        ' <head> before any Dart scripts. Alternatively you can get a different'
+        ' version of polymer.js by following the instructions at'
+        ' http://www.polymer-project.org.');
+  }
 
-/**
- * Libraries that will be initialized. For each library, the intialization
- * registers any type tagged with a [CustomTag] annotation and calls any
- * top-level method annotated with [initMethod]. The value of this field is
- * assigned programatically by the code generated from the polymer deploy
- * scripts. During development, the libraries are inferred by crawling HTML
- * imports and searching for script tags.
- */
-List<String> _librariesToLoad =
-    _discoverScripts(document, window.location.href);
-bool _useDirtyChecking = true;
+  // TODO(jmesserly): dart:js appears to not callback in the correct zone:
+  // https://code.google.com/p/dart/issues/detail?id=17301
+  var zone = Zone.current;
 
-void _loadLibraries() {
-  for (var lib in _librariesToLoad) {
-    try {
-      _loadLibrary(lib);
-    } catch (e, s) {
-      // Deliver errors async, so if a single library fails it doesn't prevent
-      // other things from loading.
-      new Completer().completeError(e, s);
+  polymerJs.callMethod('whenPolymerReady',
+      [zone.bindCallback(() => Polymer._onReady.complete())]);
+
+  JsFunction originalRegister = _polymerElementProto['register'];
+  if (originalRegister == null) {
+    throw new StateError('polymer.js must expose "register" function on '
+        'polymer-element to enable polymer.dart to interoperate.');
+  }
+
+  registerDart(jsElem, String name, String extendee) {
+    // By the time we get here, we'll know for sure if it is a Dart object
+    // or not, because polymer-element will wait for us to notify that
+    // the @CustomTag was found.
+    final type = _getRegisteredType(name);
+    if (type != null) {
+      final extendsDecl = _getDeclaration(extendee);
+      return zone.run(() =>
+          new PolymerDeclaration(jsElem, name, type, extendsDecl).register());
     }
+    // It's a JavaScript polymer element, fall back to the original register.
+    return originalRegister.apply([name, extendee], thisArg: jsElem);
   }
+
+  _polymerElementProto['register'] = new JsFunction.withThis(registerDart);
 }
 
-/**
- * Walks the HTML import structure to discover all script tags that are
- * implicitly loaded. This code is only used in Dartium and should only be
- * called after all HTML imports are resolved. Polymer ensures this by asking
- * users to put their Dart script tags after all HTML imports (this is checked
- * by the linter, and Dartium will otherwise show an error message).
- */
-List<String> _discoverScripts(Document doc, String baseUri,
-    [Set<Document> seen, List<String> scripts]) {
-  if (seen == null) seen = new Set<Document>();
-  if (scripts == null) scripts = <String>[];
-  if (doc == null) {
-    print('warning: $baseUri not found.');
-    return scripts;
-  }
-  if (seen.contains(doc)) return scripts;
-  seen.add(doc);
-
-  bool scriptSeen = false;
-  for (var node in doc.queryAll('script,link[rel="import"]')) {
-    if (node is LinkElement) {
-      _discoverScripts(node.import, node.href, seen, scripts);
-    } else if (node is ScriptElement && node.type == 'application/dart') {
-      if (!scriptSeen) {
-        var url = node.src;
-        scripts.add(url == '' ? baseUri : url);
-        scriptSeen = true;
-      } else {
-        print('warning: more than one Dart script tag in $baseUri. Dartium '
-            'currently only allows a single Dart script tag per document.');
-      }
-    }
-  }
-  return scripts;
-}
-
-/** All libraries in the current isolate. */
-final _libs = currentMirrorSystem().libraries;
-
-// TODO(sigmund): explore other (cheaper) ways to resolve URIs relative to the
-// root library (see dartbug.com/12612)
-final _rootUri = currentMirrorSystem().isolate.rootLibrary.uri;
-
-final String _packageRoot =
-    '${path.dirname(Uri.parse(window.location.href).path)}/packages/';
-
-final Logger _loaderLog = new Logger('polymer.loader');
-
-/**
- * Reads the library at [uriString] (which can be an absolute URI or a relative
- * URI from the root library), and:
- *
- *   * If present, invokes any top-level and static functions marked
- *     with the [initMethod] annotation (in the order they appear).
- *
- *   * Registers any [PolymerElement] that is marked with the [CustomTag]
- *     annotation.
- */
-void _loadLibrary(String uriString) {
-  var uri = _rootUri.resolve(uriString);
-  var lib = _libs[uri];
-  if (uri.path.startsWith(_packageRoot) && uri.path.endsWith('.dart')) {
-    var packageUri =
-        Uri.parse('package:${uri.path.substring(_packageRoot.length)}');
-    var canonicalLib = _libs[packageUri];
-    if (canonicalLib != null) {
-      lib = canonicalLib;
-    }
-  }
-
-  if (lib == null) {
-    _loaderLog.info('$uri library not found');
-    return;
-  }
-
-  // Search top-level functions marked with @initMethod
-  for (var f in lib.functions.values) {
-    _maybeInvoke(lib, f);
-  }
-
-  for (var c in lib.classes.values) {
-    // Search for @CustomTag on classes
-    for (var m in c.metadata) {
-      var meta = m.reflectee;
-      if (meta is CustomTag) {
-        Polymer.register(meta.tagName, getReflectedTypeWorkaround(c));
-      }
-    }
-
-    // TODO(sigmund): check also static methods marked with @initMethod.
-    // This is blocked on two bugs:
-    //  - dartbug.com/12133 (static methods are incorrectly listed as top-level
-    //    in dart2js, so they end up being called twice)
-    //  - dartbug.com/12134 (sometimes "method.metadata" throws an exception,
-    //    we could wrap and hide those exceptions, but it's not ideal).
-  }
-}
-
-void _maybeInvoke(ObjectMirror obj, MethodMirror method) {
-  var annotationFound = false;
-  for (var meta in method.metadata) {
-    if (identical(meta.reflectee, initMethod)) {
-      annotationFound = true;
-      break;
-    }
-  }
-  if (!annotationFound) return;
-  if (!method.isStatic) {
-    print("warning: methods marked with @initMethod should be static,"
-        " ${method.simpleName} is not.");
-    return;
-  }
-  if (!method.parameters.where((p) => !p.isOptional).isEmpty) {
-    print("warning: methods marked with @initMethod should take no "
-        "arguments, ${method.simpleName} expects some.");
-    return;
-  }
-  obj.invoke(method.simpleName, const []);
-}
-
-class _InitMethodAnnotation {
-  const _InitMethodAnnotation();
-}
+// Note: we cache this so we can use it later to look up 'init'.
+// See registerSync.
+JsObject _polymerElementProto = () {
+  var polyElem = document.createElement('polymer-element');
+  var proto = new JsObject.fromBrowserObject(polyElem)['__proto__'];
+  if (proto is Node) proto = new JsObject.fromBrowserObject(proto);
+  return proto;
+}();

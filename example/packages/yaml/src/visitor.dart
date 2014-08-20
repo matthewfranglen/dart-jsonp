@@ -2,10 +2,10 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library visitor;
+library yaml.visitor;
 
+import 'equality.dart';
 import 'model.dart';
-import 'yaml_map.dart';
 
 /// The visitor pattern for YAML documents.
 class Visitor {
@@ -21,7 +21,7 @@ class Visitor {
 
   /// Visits each key and value in [map] and returns a map of the results.
   visitMapping(MappingNode map) {
-    var out = new YamlMap();
+    var out = deepEqualsMap();
     for (var key in map.content.keys) {
       out[key.visit(this)] = map.content[key].visit(this);
     }

@@ -38,7 +38,7 @@ window.onerror = function (message, url, lineNumber) {
 // HTML Imports allows a document to link to other HTMLs documents via
 // <link rel=import>. It also allows for those other documents to contain
 // <script> tags, which must be run before scripts on the main page.
-// We have package:html_import to polyfill this feature, and it will handle
+// We have package:web_components to polyfill this feature, and it will handle
 // starting Dartium/content_shell in that case. HTML Imports is used by Polymer,
 // but it could be used by itself too. See the specification:
 // https://dvcs.w3.org/hg/webcomponents/raw-file/tip/spec/imports/index.html
@@ -47,7 +47,7 @@ if (navigator.webkitStartDart && !window.HTMLImports) {
 }
 
 // testRunner is provided by content shell.
-// It is not available in selenium tests.
+// It is not available in browser tests.
 var testRunner = window.testRunner || window.layoutTestController;
 
 var waitForDone = false;
@@ -135,8 +135,8 @@ function showErrorAndExit(message) {
   if (message) {
     printMessage('Error: ' + String(message));
   }
-  // dart/tools/testing/run_selenium.py is looking for either PASS or
-  // FAIL and will continue polling until one of these words show up.
+  // dart/tools/testing/test_runner.dart is looking for either PASS or
+  // FAIL in a browser test's output.
   printMessage('FAIL');
   notifyDone();
 }

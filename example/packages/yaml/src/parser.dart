@@ -2,13 +2,16 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-library parser;
+library yaml.parser;
 
 import 'dart:collection';
 
+import 'package:source_span/source_span.dart';
+import 'package:string_scanner/string_scanner.dart';
+
+import 'equality.dart';
 import 'model.dart';
-import 'yaml_exception.dart';
-import 'yaml_map.dart';
+import 'utils.dart';
 
 /// Translates a string of characters into a YAML serialization tree.
 ///
@@ -116,48 +119,28 @@ class Parser {
   static const CHOMPING_KEEP = 1;
   static const CHOMPING_CLIP = 2;
 
-  /// The source string being parsed.
-  final String _s;
-
-  /// The current position in the source string.
-  int _pos = 0;
-
-  /// The length of the string being parsed.
-  final int _len;
-
-  /// The current (0-based) line in the source string.
-  int _line = 0;
-
-  /// The current (0-based) column in the source string.
-  int _column = 0;
+  /// The scanner that's used to scan through the document.
+  final SpanScanner _scanner;
 
   /// Whether we're parsing a bare document (that is, one that doesn't begin
   /// with `---`). Bare documents don't allow `%` immediately following
   /// newlines.
   bool _inBareDocument = false;
 
-  /// The line number of the farthest position that has been parsed successfully
-  /// before backtracking. Used for error reporting.
-  int _farthestLine = 0;
-
-  /// The column number of the farthest position that has been parsed
-  /// successfully before backtracking. Used for error reporting.
-  int _farthestColumn = 0;
-
-  /// The farthest position in the source string that has been parsed
-  /// successfully before backtracking. Used for error reporting.
-  int _farthestPos = 0;
+  /// The state of the scanner when it was the farthest in the document it's
+  /// been.
+  LineScannerState _farthestState;
 
   /// The name of the context of the farthest position that has been parsed
   /// successfully before backtracking. Used for error reporting.
   String _farthestContext = "document";
 
   /// A stack of the names of parse contexts. Used for error reporting.
-  List<String> _contextStack;
+  final _contextStack = <String>["document"];
 
   /// Annotations attached to ranges of the source string that add extra
   /// information to any errors that occur in the annotated range.
-  _RangeMap<String> _errorAnnotations;
+  final _errorAnnotations = new _RangeMap<String>();
 
   /// The buffer containing the string currently being captured.
   StringBuffer _capturedString;
@@ -168,46 +151,18 @@ class Parser {
   /// Whether the current string capture is being overridden.
   bool _capturingAs = false;
 
-  Parser(String s)
-    : this._s = s,
-      _len = s.length,
-      _contextStack = <String>["document"],
-      _errorAnnotations = new _RangeMap();
-
-  /// Return the character at the current position, then move that position
-  /// forward one character. Also updates the current line and column numbers.
-  int next() {
-    if (_pos == _len) return -1;
-    var char = _s.codeUnitAt(_pos++);
-    if (isBreak(char)) {
-      _line++;
-      _column = 0;
-    } else {
-      _column++;
-    }
-
-    if (_farthestLine < _line) {
-      _farthestLine = _line;
-      _farthestColumn = _column;
-      _farthestContext = _contextStack.last;
-    } else if (_farthestLine == _line && _farthestColumn < _column) {
-      _farthestColumn = _column;
-      _farthestContext = _contextStack.last;
-    }
-    _farthestPos = _pos;
-
-    return char;
+  Parser(String yaml, sourceUrl)
+      : _scanner = new SpanScanner(yaml, sourceUrl: sourceUrl) {
+    _farthestState = _scanner.state;
   }
+
+  /// Returns the character at the current position, then moves that position
+  /// forward one character.
+  int next() => _scanner.readChar();
 
   /// Returns the code unit at the current position, or the character [i]
   /// characters after the current position.
-  ///
-  /// Returns -1 if this would return a character after the end or before the
-  /// beginning of the input string.
-  int peek([int i = 0]) {
-    var peekPos = _pos + i;
-    return (peekPos >= _len || peekPos < 0) ? -1 : _s.codeUnitAt(peekPos);
-  }
+  int peek([int i = 0]) => _scanner.peekChar(i);
 
   /// The truthiness operator. Returns `false` if [obj] is `null` or `false`,
   /// `true` otherwise.
@@ -249,11 +204,11 @@ class Parser {
   /// Conceptually, repeats a production any number of times.
   List zeroOrMore(consumer()) {
     var out = [];
-    var oldPos = _pos;
+    var oldPos = _scanner.position;
     while (true) {
       var el = consumer();
-      if (!truth(el) || oldPos == _pos) return out;
-      oldPos = _pos;
+      if (!truth(el) || oldPos == _scanner.position) return out;
+      oldPos = _scanner.position;
       out.add(el);
     }
     return null; // Unreachable.
@@ -276,18 +231,15 @@ class Parser {
   /// Calls [consumer] and returns its result, but rolls back the parser state
   /// if [consumer] returns a falsey value.
   transaction(consumer()) {
-    var oldPos = _pos;
-    var oldLine = _line;
-    var oldColumn = _column;
+    var oldState = _scanner.state;
     var oldCaptureStart = _captureStart;
     String capturedSoFar = _capturedString == null ? null :
       _capturedString.toString();
     var res = consumer();
+    _refreshFarthestState();
     if (truth(res)) return res;
 
-    _pos = oldPos;
-    _line = oldLine;
-    _column = oldColumn;
+    _scanner.state = oldState;
     _captureStart = oldCaptureStart;
     _capturedString = capturedSoFar == null ? null :
       new StringBuffer(capturedSoFar);
@@ -324,7 +276,7 @@ class Parser {
     // captureString calls may not be nested
     assert(_capturedString == null);
 
-    _captureStart = _pos;
+    _captureStart = _scanner.position;
     _capturedString = new StringBuffer();
     var res = transaction(consumer);
     if (!truth(res)) {
@@ -353,18 +305,20 @@ class Parser {
     _capturingAs = false;
     if (!truth(res)) return res;
 
-    _capturedString.write(transformation(_s.substring(_captureStart, _pos)));
-    _captureStart = _pos;
+    _capturedString.write(transformation(
+        _scanner.string.substring(_captureStart, _scanner.position)));
+    _captureStart = _scanner.position;
     return res;
   }
 
   void flushCapture() {
-    _capturedString.write(_s.substring(_captureStart, _pos));
-    _captureStart = _pos;
+    _capturedString.write(_scanner.string.substring(
+        _captureStart, _scanner.position));
+    _captureStart = _scanner.position;
   }
 
   /// Adds a tag and an anchor to [node], if they're defined.
-  Node addProps(Node node, _Pair<Tag, String> props) {
+  Node addProps(Node node, Pair<Tag, String> props) {
     if (props == null || node == null) return node;
     if (truth(props.first)) node.tag = props.first;
     if (truth(props.last)) node.anchor = props.last;
@@ -372,10 +326,10 @@ class Parser {
   }
 
   /// Creates a MappingNode from [pairs].
-  MappingNode map(List<_Pair<Node, Node>> pairs) {
+  MappingNode map(List<Pair<Node, Node>> pairs, SourceSpan span) {
     var content = new Map<Node, Node>();
     pairs.forEach((pair) => content[pair.first] = pair.last);
-    return new MappingNode("?", content);
+    return new MappingNode("?", content, span);
   }
 
   /// Runs [fn] in a context named [name]. Used for error reporting.
@@ -393,37 +347,45 @@ class Parser {
   /// current position and the position of the cursor after running [fn]. The
   /// cursor is reset after [fn] is run.
   annotateError(String message, fn()) {
-    var start = _pos;
+    var start = _scanner.position;
     var end;
     transaction(() {
       fn();
-      end = _pos;
+      end = _scanner.position;
       return false;
     });
     _errorAnnotations[new _Range(start, end)] = message;
   }
 
   /// Throws an error with additional context information.
-  error(String message) {
-    // Line and column should be one-based.
-    throw new SyntaxError(_line + 1, _column + 1,
-        "$message (in $_farthestContext)");
-  }
+  void error(String message) =>
+      _scanner.error("$message (in $_farthestContext).");
 
   /// If [result] is falsey, throws an error saying that [expected] was
   /// expected.
   expect(result, String expected) {
     if (truth(result)) return result;
-    error("expected $expected");
+    error("Expected $expected");
   }
 
-  /// Throws an error saying that the parse failed. Uses [_farthestLine],
-  /// [_farthestColumn], and [_farthestContext] to provide additional information.
+  /// Throws an error saying that the parse failed.
+  ///
+  /// Uses [_farthestState] and [_farthestContext] to provide additional
+  /// information.
   parseFailed() {
-    var message = "invalid YAML in $_farthestContext";
-    var extraError = _errorAnnotations[_farthestPos];
+    var message = "Invalid YAML in $_farthestContext";
+    _refreshFarthestState();
+    _scanner.state = _farthestState;
+
+    var extraError = _errorAnnotations[_scanner.position];
     if (extraError != null) message = "$message ($extraError)";
-    throw new SyntaxError(_farthestLine + 1, _farthestColumn + 1, message);
+    _scanner.error("$message.");
+  }
+
+  /// Update [_farthestState] if the scanner is farther than it's been before.
+  void _refreshFarthestState() {
+    if (_scanner.position <= _farthestState.position) return;
+    _farthestState = _scanner.state;
   }
 
   /// Returns the number of spaces after the current position.
@@ -438,15 +400,11 @@ class Parser {
     if (!header.autoDetectIndent) return header.additionalIndent;
 
     var maxSpaces = 0;
-    var maxSpacesLine = 0;
     var spaces = 0;
     transaction(() {
       do {
         spaces = captureString(() => zeroOrMore(() => consumeChar(SP))).length;
-        if (spaces > maxSpaces) {
-          maxSpaces = spaces;
-          maxSpacesLine = _line;
-        }
+        if (spaces > maxSpaces) maxSpaces = spaces;
       } while (b_break());
       return false;
     });
@@ -459,19 +417,15 @@ class Parser {
     // It's an error for a leading empty line to be indented more than the first
     // non-empty line.
     if (maxSpaces > spaces) {
-      throw new SyntaxError(maxSpacesLine + 1, maxSpaces,
-          "Leading empty lines may not be indented more than the first "
-          "non-empty line.");
+      _scanner.error("Leading empty lines may not be indented more than the "
+          "first non-empty line.");
     }
 
     return spaces - indent;
   }
 
   /// Returns whether the current position is at the beginning of a line.
-  bool get atStartOfLine => _column == 0;
-
-  /// Returns whether the current position is at the end of the input.
-  bool get atEndOfFile => _pos == _len;
+  bool get atStartOfLine => _scanner.column == 0;
 
   /// Given an indicator character, returns the type of that indicator (or null
   /// if the indicator isn't found.
@@ -503,6 +457,7 @@ class Parser {
 
   // 1
   bool isPrintable(int char) {
+    if (char == null) return false;
     return char == TAB ||
       char == LF ||
       char == CR ||
@@ -514,7 +469,8 @@ class Parser {
   }
 
   // 2
-  bool isJson(int char) => char == TAB || (char >= SP && char <= 0x10FFFF);
+  bool isJson(int char) => char != null &&
+      (char == TAB || (char >= SP && char <= 0x10FFFF));
 
   // 22
   bool c_indicator(int type) => consume((c) => indicatorType(c) == type);
@@ -557,10 +513,12 @@ class Parser {
   bool isNonSpace(int char) => isNonBreak(char) && !isSpace(char);
 
   // 35
-  bool isDecDigit(int char) => char >= NUMBER_0 && char <= NUMBER_9;
+  bool isDecDigit(int char) => char != null && char >= NUMBER_0 &&
+      char <= NUMBER_9;
 
   // 36
   bool isHexDigit(int char) {
+    if (char == null) return false;
     return isDecDigit(char) ||
       (char >= LETTER_A && char <= LETTER_F) ||
       (char >= LETTER_CAP_A && char <= LETTER_CAP_F);
@@ -753,7 +711,7 @@ class Parser {
   }
 
   // 76
-  bool b_comment() => atEndOfFile || b_nonContent();
+  bool b_comment() => _scanner.isDone || b_nonContent();
 
   // 77
   bool s_b_comment() {
@@ -788,7 +746,7 @@ class Parser {
     case BLOCK_KEY:
     case FLOW_KEY:
       return s_separateInLine();
-    default: throw 'invalid context "$ctx"';
+    default: throw 'Invalid context "$ctx".';
     }
   }
 
@@ -802,7 +760,7 @@ class Parser {
   bool l_directive() => false; // TODO(nweiz): implement
 
   // 96
-  _Pair<Tag, String> c_ns_properties(int indent, int ctx) {
+  Pair<Tag, String> c_ns_properties(int indent, int ctx) {
     var tag, anchor;
     tag = c_ns_tagProperty();
     if (truth(tag)) {
@@ -810,7 +768,7 @@ class Parser {
         if (!truth(s_separate(indent, ctx))) return null;
         return c_ns_anchorProperty();
       });
-      return new _Pair<Tag, String>(tag, anchor);
+      return new Pair<Tag, String>(tag, anchor);
     }
 
     anchor = c_ns_anchorProperty();
@@ -819,7 +777,7 @@ class Parser {
         if (!truth(s_separate(indent, ctx))) return null;
         return c_ns_tagProperty();
       });
-      return new _Pair<Tag, String>(tag, anchor);
+      return new Pair<Tag, String>(tag, anchor);
     }
 
     return null;
@@ -840,13 +798,14 @@ class Parser {
 
   // 104
   Node c_ns_aliasNode() {
+    var start = _scanner.state;
     if (!truth(c_indicator(C_ALIAS))) return null;
     var name = expect(ns_anchorName(), 'anchor name');
-    return new AliasNode(name);
+    return new AliasNode(name, _scanner.spanFrom(start));
   }
 
   // 105
-  ScalarNode e_scalar() => new ScalarNode("?", content: "");
+  ScalarNode e_scalar() => new ScalarNode("?", _scanner.emptySpan, content: "");
 
   // 106
   ScalarNode e_node() => e_scalar();
@@ -863,10 +822,11 @@ class Parser {
   // 109
   Node c_doubleQuoted(int indent, int ctx) => context('string', () {
     return transaction(() {
+      var start = _scanner.state;
       if (!truth(c_indicator(C_DOUBLE_QUOTE))) return null;
       var contents = nb_doubleText(indent, ctx);
       if (!truth(c_indicator(C_DOUBLE_QUOTE))) return null;
-      return new ScalarNode("!", content: contents);
+      return new ScalarNode("!", _scanner.spanFrom(start), content: contents);
     });
   });
 
@@ -951,10 +911,11 @@ class Parser {
   // 120
   Node c_singleQuoted(int indent, int ctx) => context('string', () {
     return transaction(() {
+      var start = _scanner.state;
       if (!truth(c_indicator(C_SINGLE_QUOTE))) return null;
       var contents = nb_singleText(indent, ctx);
       if (!truth(c_indicator(C_SINGLE_QUOTE))) return null;
-      return new ScalarNode("!", content: contents);
+      return new ScalarNode("!", _scanner.spanFrom(start), content: contents);
     });
   });
 
@@ -1014,7 +975,7 @@ class Parser {
     var char = peek();
     var indicator = indicatorType(char);
     if (indicator == C_RESERVED) {
-      error("reserved indicators can't start a plain scalar");
+      error("Reserved indicators can't start a plain scalar");
     }
     var match = (isNonSpace(char) && indicator == null) ||
       ((indicator == C_MAPPING_KEY ||
@@ -1037,7 +998,7 @@ class Parser {
     case FLOW_KEY:
       // 129
       return isNonSpace(char) && !isFlowIndicator(char);
-    default: throw 'invalid context "$ctx"';
+    default: throw 'Invalid context "$ctx".';
     }
   }
 
@@ -1066,7 +1027,7 @@ class Parser {
       case BLOCK_KEY:
       case FLOW_KEY:
         return ns_plainOneLine(ctx);
-      default: throw 'invalid context "$ctx"';
+      default: throw 'Invalid context "$ctx".';
       }
     });
   });
@@ -1106,22 +1067,25 @@ class Parser {
   // 136
   int inFlow(int ctx) {
     switch (ctx) {
-    case FLOW_OUT:
-    case FLOW_IN:
-      return FLOW_IN;
-    case BLOCK_KEY:
-    case FLOW_KEY:
-      return FLOW_KEY;
+      case FLOW_OUT:
+      case FLOW_IN:
+        return FLOW_IN;
+      case BLOCK_KEY:
+      case FLOW_KEY:
+        return FLOW_KEY;
     }
+    throw "unreachable";
   }
 
   // 137
   SequenceNode c_flowSequence(int indent, int ctx) => transaction(() {
+    var start = _scanner.state;
     if (!truth(c_indicator(C_SEQUENCE_START))) return null;
     zeroOrOne(() => s_separate(indent, ctx));
     var content = zeroOrOne(() => ns_s_flowSeqEntries(indent, inFlow(ctx)));
     if (!truth(c_indicator(C_SEQUENCE_END))) return null;
-    return new SequenceNode("?", new List<Node>.from(content));
+    return new SequenceNode("?", new List<Node>.from(content),
+        _scanner.spanFrom(start));
   });
 
   // 138
@@ -1150,17 +1114,18 @@ class Parser {
 
   // 140
   Node c_flowMapping(int indent, int ctx) {
+    var start = _scanner.state;
     if (!truth(c_indicator(C_MAPPING_START))) return null;
     zeroOrOne(() => s_separate(indent, ctx));
     var content = zeroOrOne(() => ns_s_flowMapEntries(indent, inFlow(ctx)));
     if (!truth(c_indicator(C_MAPPING_END))) return null;
-    return new MappingNode("?", content);
+    return new MappingNode("?", content, _scanner.spanFrom(start));
   }
 
   // 141
-  YamlMap ns_s_flowMapEntries(int indent, int ctx) {
+  Map ns_s_flowMapEntries(int indent, int ctx) {
     var first = ns_flowMapEntry(indent, ctx);
-    if (!truth(first)) return new YamlMap();
+    if (!truth(first)) return deepEqualsMap();
     zeroOrOne(() => s_separate(indent, ctx));
 
     var rest;
@@ -1169,7 +1134,7 @@ class Parser {
       rest = ns_s_flowMapEntries(indent, ctx);
     }
 
-    if (rest == null) rest = new YamlMap();
+    if (rest == null) rest = deepEqualsMap();
 
     // TODO(nweiz): Duplicate keys should be an error. This includes keys with
     // different representations but the same value (e.g. 10 vs 0xa). To make
@@ -1181,7 +1146,7 @@ class Parser {
   }
 
   // 142
-  _Pair<Node, Node> ns_flowMapEntry(int indent, int ctx) => or([
+  Pair<Node, Node> ns_flowMapEntry(int indent, int ctx) => or([
     () => transaction(() {
       if (!truth(c_indicator(C_MAPPING_KEY))) return false;
       if (!truth(s_separate(indent, ctx))) return false;
@@ -1191,20 +1156,20 @@ class Parser {
   ]);
 
   // 143
-  _Pair<Node, Node> ns_flowMapExplicitEntry(int indent, int ctx) => or([
+  Pair<Node, Node> ns_flowMapExplicitEntry(int indent, int ctx) => or([
     () => ns_flowMapImplicitEntry(indent, ctx),
-    () => new _Pair<Node, Node>(e_node(), e_node())
+    () => new Pair<Node, Node>(e_node(), e_node())
   ]);
 
   // 144
-  _Pair<Node, Node> ns_flowMapImplicitEntry(int indent, int ctx) => or([
+  Pair<Node, Node> ns_flowMapImplicitEntry(int indent, int ctx) => or([
     () => ns_flowMapYamlKeyEntry(indent, ctx),
     () => c_ns_flowMapEmptyKeyEntry(indent, ctx),
     () => c_ns_flowMapJsonKeyEntry(indent, ctx)
   ]);
 
   // 145
-  _Pair<Node, Node> ns_flowMapYamlKeyEntry(int indent, int ctx) {
+  Pair<Node, Node> ns_flowMapYamlKeyEntry(int indent, int ctx) {
     var key = ns_flowYamlNode(indent, ctx);
     if (!truth(key)) return null;
     var value = or([
@@ -1214,14 +1179,14 @@ class Parser {
       }),
       e_node
     ]);
-    return new _Pair<Node, Node>(key, value);
+    return new Pair<Node, Node>(key, value);
   }
 
   // 146
-  _Pair<Node, Node> c_ns_flowMapEmptyKeyEntry(int indent, int ctx) {
+  Pair<Node, Node> c_ns_flowMapEmptyKeyEntry(int indent, int ctx) {
     var value = c_ns_flowMapSeparateValue(indent, ctx);
     if (!truth(value)) return null;
-    return new _Pair<Node, Node>(e_node(), value);
+    return new Pair<Node, Node>(e_node(), value);
   }
 
   // 147
@@ -1239,7 +1204,7 @@ class Parser {
   });
 
   // 148
-  _Pair<Node, Node> c_ns_flowMapJsonKeyEntry(int indent, int ctx) {
+  Pair<Node, Node> c_ns_flowMapJsonKeyEntry(int indent, int ctx) {
     var key = c_flowJsonNode(indent, ctx);
     if (!truth(key)) return null;
     var value = or([
@@ -1249,7 +1214,7 @@ class Parser {
       }),
       e_node
     ]);
-    return new _Pair<Node, Node>(key, value);
+    return new Pair<Node, Node>(key, value);
   }
 
   // 149
@@ -1266,6 +1231,7 @@ class Parser {
 
   // 150
   Node ns_flowPair(int indent, int ctx) {
+    var start = _scanner.state;
     var pair = or([
       () => transaction(() {
         if (!truth(c_indicator(C_MAPPING_KEY))) return null;
@@ -1276,34 +1242,34 @@ class Parser {
     ]);
     if (!truth(pair)) return null;
 
-    return map([pair]);
+    return map([pair], _scanner.spanFrom(start));
   }
 
   // 151
-  _Pair<Node, Node> ns_flowPairEntry(int indent, int ctx) => or([
+  Pair<Node, Node> ns_flowPairEntry(int indent, int ctx) => or([
     () => ns_flowPairYamlKeyEntry(indent, ctx),
     () => c_ns_flowMapEmptyKeyEntry(indent, ctx),
     () => c_ns_flowPairJsonKeyEntry(indent, ctx)
   ]);
 
   // 152
-  _Pair<Node, Node> ns_flowPairYamlKeyEntry(int indent, int ctx) =>
+  Pair<Node, Node> ns_flowPairYamlKeyEntry(int indent, int ctx) =>
     transaction(() {
       var key = ns_s_implicitYamlKey(FLOW_KEY);
       if (!truth(key)) return null;
       var value = c_ns_flowMapSeparateValue(indent, ctx);
       if (!truth(value)) return null;
-      return new _Pair<Node, Node>(key, value);
+      return new Pair<Node, Node>(key, value);
     });
 
   // 153
-  _Pair<Node, Node> c_ns_flowPairJsonKeyEntry(int indent, int ctx) =>
+  Pair<Node, Node> c_ns_flowPairJsonKeyEntry(int indent, int ctx) =>
     transaction(() {
       var key = c_s_implicitJsonKey(FLOW_KEY);
       if (!truth(key)) return null;
       var value = c_ns_flowMapAdjacentValue(indent, ctx);
       if (!truth(value)) return null;
-      return new _Pair<Node, Node>(key, value);
+      return new Pair<Node, Node>(key, value);
     });
 
   // 154
@@ -1330,9 +1296,10 @@ class Parser {
 
   // 156
   Node ns_flowYamlContent(int indent, int ctx) {
+    var start = _scanner.state;
     var str = ns_plain(indent, ctx);
     if (!truth(str)) return null;
-    return new ScalarNode("?", content: str);
+    return new ScalarNode("?", _scanner.spanFrom(start), content: str);
   }
 
   // 157
@@ -1426,7 +1393,7 @@ class Parser {
 
   // 165
   bool b_chompedLast(int chomping) {
-    if (atEndOfFile) return true;
+    if (_scanner.isDone) return true;
     switch (chomping) {
     case CHOMPING_STRIP:
       return b_nonContent();
@@ -1434,6 +1401,7 @@ class Parser {
     case CHOMPING_KEEP:
       return b_asLineFeed();
     }
+    throw "unreachable";
   }
 
   // 166
@@ -1478,6 +1446,7 @@ class Parser {
 
   // 170
   Node c_l_literal(int indent) => transaction(() {
+    var start = _scanner.state;
     if (!truth(c_indicator(C_LITERAL))) return null;
     var header = c_b_blockHeader();
     if (!truth(header)) return null;
@@ -1486,7 +1455,7 @@ class Parser {
     var content = l_literalContent(indent + additionalIndent, header.chomping);
     if (!truth(content)) return null;
 
-    return new ScalarNode("!", content: content);
+    return new ScalarNode("!", _scanner.spanFrom(start), content: content);
   });
 
   // 171
@@ -1515,6 +1484,7 @@ class Parser {
 
   // 174
   Node c_l_folded(int indent) => transaction(() {
+    var start = _scanner.state;
     if (!truth(c_indicator(C_FOLDED))) return null;
     var header = c_b_blockHeader();
     if (!truth(header)) return null;
@@ -1523,7 +1493,7 @@ class Parser {
     var content = l_foldedContent(indent + additionalIndent, header.chomping);
     if (!truth(content)) return null;
 
-    return new ScalarNode("!", content: content);
+    return new ScalarNode("!", _scanner.spanFrom(start), content: content);
   });
 
   // 175
@@ -1603,13 +1573,14 @@ class Parser {
     var additionalIndent = countIndentation() - indent;
     if (additionalIndent <= 0) return null;
 
+    var start = _scanner.state;
     var content = oneOrMore(() => transaction(() {
       if (!truth(s_indent(indent + additionalIndent))) return null;
       return c_l_blockSeqEntry(indent + additionalIndent);
     }));
     if (!truth(content)) return null;
 
-    return new SequenceNode("?", content);
+    return new SequenceNode("?", content, _scanner.spanFrom(start));
   });
 
   // 184
@@ -1636,6 +1607,7 @@ class Parser {
 
   // 186
   Node ns_l_compactSequence(int indent) => context('sequence', () {
+    var start = _scanner.state;
     var first = c_l_blockSeqEntry(indent);
     if (!truth(first)) return null;
 
@@ -1645,7 +1617,7 @@ class Parser {
       }));
     content.insert(0, first);
 
-    return new SequenceNode("?", content);
+    return new SequenceNode("?", content, _scanner.spanFrom(start));
   });
 
   // 187
@@ -1653,23 +1625,24 @@ class Parser {
     var additionalIndent = countIndentation() - indent;
     if (additionalIndent <= 0) return null;
 
+    var start = _scanner.state;
     var pairs = oneOrMore(() => transaction(() {
       if (!truth(s_indent(indent + additionalIndent))) return null;
       return ns_l_blockMapEntry(indent + additionalIndent);
     }));
     if (!truth(pairs)) return null;
 
-    return map(pairs);
+    return map(pairs, _scanner.spanFrom(start));
   });
 
   // 188
-  _Pair<Node, Node> ns_l_blockMapEntry(int indent) => or([
+  Pair<Node, Node> ns_l_blockMapEntry(int indent) => or([
     () => c_l_blockMapExplicitEntry(indent),
     () => ns_l_blockMapImplicitEntry(indent)
   ]);
 
   // 189
-  _Pair<Node, Node> c_l_blockMapExplicitEntry(int indent) {
+  Pair<Node, Node> c_l_blockMapExplicitEntry(int indent) {
     var key = c_l_blockMapExplicitKey(indent);
     if (!truth(key)) return null;
 
@@ -1678,7 +1651,7 @@ class Parser {
       e_node
     ]);
 
-    return new _Pair<Node, Node>(key, value);
+    return new Pair<Node, Node>(key, value);
   }
 
   // 190
@@ -1695,10 +1668,10 @@ class Parser {
   });
 
   // 192
-  _Pair<Node, Node> ns_l_blockMapImplicitEntry(int indent) => transaction(() {
+  Pair<Node, Node> ns_l_blockMapImplicitEntry(int indent) => transaction(() {
     var key = or([ns_s_blockMapImplicitKey, e_node]);
     var value = c_l_blockMapImplicitValue(indent);
-    return truth(value) ? new _Pair<Node, Node>(key, value) : null;
+    return truth(value) ? new Pair<Node, Node>(key, value) : null;
   });
 
   // 193
@@ -1719,6 +1692,7 @@ class Parser {
 
   // 195
   Node ns_l_compactMapping(int indent) => context('mapping', () {
+    var start = _scanner.state;
     var first = ns_l_blockMapEntry(indent);
     if (!truth(first)) return null;
 
@@ -1728,7 +1702,7 @@ class Parser {
       }));
     pairs.insert(0, first);
 
-    return map(pairs);
+    return map(pairs, _scanner.spanFrom(start));
   });
 
   // 196
@@ -1807,7 +1781,7 @@ class Parser {
     transaction(() {
       if (!truth(or([c_directivesEnd, c_documentEnd]))) return;
       var char = peek();
-      forbidden = isBreak(char) || isSpace(char) || atEndOfFile;
+      forbidden = isBreak(char) || isSpace(char) || _scanner.isDone;
       return;
     });
     return forbidden;
@@ -1848,7 +1822,8 @@ class Parser {
     or([l_directiveDocument, l_explicitDocument, l_bareDocument]);
 
   // 211
-  List<Node> l_yamlStream() {
+  Pair<List<Node>, SourceSpan> l_yamlStream() {
+    var start = _scanner.state;
     var docs = [];
     zeroOrMore(l_documentPrefix);
     var first = zeroOrOne(l_anyDocument);
@@ -1868,29 +1843,9 @@ class Parser {
       return doc;
     });
 
-    if (!atEndOfFile) parseFailed();
-    return docs;
+    if (!_scanner.isDone) parseFailed();
+    return new Pair(docs, _scanner.spanFrom(start));
   }
-}
-
-class SyntaxError extends YamlException {
-  final int _line;
-  final int _column;
-
-  SyntaxError(this._line, this._column, String msg) : super(msg);
-
-  String toString() => "Syntax error on line $_line, column $_column: "
-      "${super.toString()}";
-}
-
-/// A pair of values.
-class _Pair<E, F> {
-  E first;
-  F last;
-
-  _Pair(this.first, this.last);
-
-  String toString() => '($first, $last)';
 }
 
 /// The information in the header for a block scalar.
@@ -1923,7 +1878,7 @@ class _Range {
 /// expensive.
 class _RangeMap<E> {
   /// The ranges and their associated elements.
-  final List<_Pair<_Range, E>> _contents = <_Pair<_Range, E>>[];
+  final List<Pair<_Range, E>> _contents = <Pair<_Range, E>>[];
 
   _RangeMap();
 
@@ -1941,5 +1896,5 @@ class _RangeMap<E> {
 
   /// Associates [value] with [range].
   operator[]=(_Range range, E value) =>
-    _contents.add(new _Pair<_Range, E>(range, value));
+    _contents.add(new Pair<_Range, E>(range, value));
 }

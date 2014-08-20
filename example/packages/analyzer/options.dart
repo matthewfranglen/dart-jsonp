@@ -4,11 +4,9 @@
 
 library options;
 
-import 'package:args/args.dart';
-import 'package:path/path.dart';
-
 import 'dart:io';
 
+import 'package:args/args.dart';
 
 const _BINARY_NAME = 'dartanalyzer';
 
@@ -26,6 +24,9 @@ class CommandLineOptions {
   /** Whether to display version information */
   final bool displayVersion;
 
+  /** A table mapping the names of defined variables to their values. */
+  final Map<String, String> definedVariables;
+
   /** Whether to report hints */
   final bool disableHints;
 
@@ -41,6 +42,9 @@ class CommandLineOptions {
   /** Whether to show SDK warnings */
   final bool showSdkWarnings;
 
+  /** Whether to show both cold and hot performance statistics */
+  final bool warmPerf;
+
   /** Whether to treat warnings as fatal */
   final bool warningsAreFatal;
 
@@ -53,10 +57,13 @@ class CommandLineOptions {
   /** The source files to analyze */
   final List<String> sourceFiles;
 
+  /** Whether to log additional analysis messages and exceptions */
+  final bool log;
+
   /**
    * Initialize options from the given parsed [args].
    */
-  CommandLineOptions._fromArgs(ArgResults args)
+  CommandLineOptions._fromArgs(ArgResults args, Map<String, String> definedVariables)
     : shouldBatch = args['batch'],
       machineFormat = args['machine'] || args['format'] == 'machine',
       displayVersion = args['version'],
@@ -65,10 +72,13 @@ class CommandLineOptions {
       perf = args['perf'],
       showPackageWarnings = args['show-package-warnings'] || args['package-warnings'],
       showSdkWarnings = args['show-sdk-warnings'] || args['warnings'],
+      warmPerf = args['warm-perf'],
       warningsAreFatal = args['fatal-warnings'],
       dartSdkPath = args['dart-sdk'],
       packageRootPath = args['package-root'],
-      sourceFiles = args.rest;
+      log = args['log'],
+      sourceFiles = args.rest,
+      this.definedVariables = definedVariables;
 
   /**
    * Parse [args] into [CommandLineOptions] describing the specified
@@ -125,17 +135,23 @@ class CommandLineOptions {
       ..addFlag('perf',
           help: 'Show performance statistics',
           defaultsTo: false, negatable: false)
+      ..addFlag('warm-perf',
+          help: 'Show both cold and warm performance statistics',
+          defaultsTo: false, negatable: false, hide: true)
       ..addFlag('warnings', help: 'Show warnings from SDK imports',
           defaultsTo: false, negatable: false)
       ..addFlag('show-sdk-warnings', help: 'Show warnings from SDK imports (deprecated)',
           defaultsTo: false, negatable: false)
       ..addFlag('help', abbr: 'h', help: 'Display this help message',
-          defaultsTo: false, negatable: false);
+          defaultsTo: false, negatable: false)
+      ..addFlag('log', help: 'Log additional messages and exceptions',
+        defaultsTo: false, negatable: false, hide: true);
 
     try {
       // TODO(scheglov) https://code.google.com/p/dart/issues/detail?id=11061
       args = args.map((String arg) => arg == '-batch' ? '--batch' : arg).toList();
-      var results = parser.parse(args);
+      Map<String, String> definedVariables = <String, String>{};
+      var results = parser.parse(args, definedVariables);
       // help requests
       if (results['help']) {
         _showUsage(parser);
@@ -157,7 +173,7 @@ class CommandLineOptions {
           exit(15);
         }
       }
-      return new CommandLineOptions._fromArgs(results);
+      return new CommandLineOptions._fromArgs(results, definedVariables);
     } on FormatException catch (e) {
       print(e.message);
       _showUsage(parser);
@@ -208,10 +224,10 @@ class _CommandLineParser {
    * See [ArgParser.addFlag()].
    */
   void addFlag(String name, {String abbr, String help, bool defaultsTo: false,
-      bool negatable: true, void callback(bool value)}) {
+      bool negatable: true, void callback(bool value), bool hide: false}) {
     _knownFlags.add(name);
     _parser.addFlag(name, abbr: abbr, help: help, defaultsTo: defaultsTo,
-        negatable: negatable, callback: callback);
+        negatable: negatable, callback: callback, hide: hide);
   }
 
   /**
@@ -238,11 +254,30 @@ class _CommandLineParser {
 
   /**
    * Parses [args], a list of command-line arguments, matches them against the
-   * flags and options defined by this parser, and returns the result.
+   * flags and options defined by this parser, and returns the result. The
+   * values of any defined variables are captured in the given map.
    *
    * See [ArgParser].
    */
-  ArgResults parse(List<String> args) => _parser.parse(_filterUnknowns(args));
+  ArgResults parse(List<String> args, Map<String, String> definedVariables) => _parser.parse(_filterUnknowns(parseDefinedVariables(args, definedVariables)));
+
+  List<String> parseDefinedVariables(List<String> args, Map<String, String> definedVariables) {
+    int count = args.length;
+    List<String> remainingArgs = <String>[];
+    for (int i = 0; i < count; i++) {
+      String arg = args[i];
+      if (arg == '--') {
+        while (i < count) {
+          remainingArgs.add(args[i++]);
+        }
+      } else if (arg.startsWith("-D")) {
+        definedVariables[arg.substring(2)] = args[++i];
+      } else {
+        remainingArgs.add(arg);
+      }
+    }
+    return remainingArgs;
+  }
 
   List<String> _filterUnknowns(args) {
 

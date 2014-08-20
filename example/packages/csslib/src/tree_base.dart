@@ -9,14 +9,14 @@ part of csslib.visitor;
  */
 abstract class TreeNode {
   /** The source code this [TreeNode] represents. */
-  Span span;
+  final SourceSpan span;
 
-  TreeNode(this.span) {}
+  TreeNode(this.span);
 
   TreeNode clone();
 
   /** Classic double-dispatch visitor for implementing passes. */
-  visit(VisitorBase visitor);
+  void visit(VisitorBase visitor);
 
   /** A multiline string showing the node and its children. */
   String toDebugString() {
@@ -29,14 +29,14 @@ abstract class TreeNode {
 
 /** The base type for expressions. */
 abstract class Expression extends TreeNode {
-  Expression(Span span): super(span);
+  Expression(SourceSpan span): super(span);
 }
 
 /** Simple class to provide a textual dump of trees for debugging. */
 class TreeOutput {
   int depth = 0;
   final StringBuffer buf = new StringBuffer();
-  var printer;
+  VisitorBase printer;
 
   void write(String s) {
     for (int i=0; i < depth; i++) {
@@ -53,7 +53,7 @@ class TreeOutput {
   void heading(String name, [span]) {
     write(name);
     if (span != null) {
-      buf.write('  (${span.getLocationMessage('')})');
+      buf.write('  (${span.message('')})');
     }
     buf.write('\n');
   }
@@ -77,21 +77,7 @@ class TreeOutput {
     writeln('${label}: ${v}');
   }
 
-  void writeList(String label, List list) {
-    write('${label}: ');
-    if (list == null) {
-      buf.write('null');
-      buf.write('\n');
-    } else {
-      for (var item in list) {
-        buf.write(item.toString());
-        buf.write(', ');
-      }
-      buf.write('\n');
-    }
-  }
-
-  void writeNodeList(String label, List list) {
+  void writeNodeList(String label, List<TreeNode> list) {
     writeln('${label} [');
     if (list != null) {
       depth += 1;

@@ -2,10 +2,8 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-/**
- * A simple unit test library for running tests on the VM.
- */
-library unittest_vm_config;
+/// A simple unit test library for running tests on the VM.
+library unittest.vm_config;
 
 import 'dart:async';
 import 'dart:io';

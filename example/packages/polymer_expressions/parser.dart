@@ -5,9 +5,12 @@
 library polymer_expressions.parser;
 
 import 'tokenizer.dart';
+export 'tokenizer.dart' show ParseException;
 import 'expression.dart';
 
-const _UNARY_OPERATORS = const ['+', '-', '!'];
+const _UNARY_OPERATORS = const <String>['+', '-', '!'];
+const _BINARY_OPERATORS = const <String>['+', '-', '*', '/', '%', '^', '==',
+    '!=', '>', '<', '>=', '<=', '||', '&&', '&', '===', '!==', '|'];
 
 Expression parse(String expr) => new Parser(expr).parse();
 
@@ -16,7 +19,7 @@ class Parser {
   final Tokenizer _tokenizer;
   List<Token> _tokens;
   Iterator _iterator;
-  Token _token;
+  Token get _token => _iterator.current;
 
   Parser(String input, {AstFactory astFactory})
       : _tokenizer = new Tokenizer(input),
@@ -30,11 +33,11 @@ class Parser {
   }
 
   _advance([int kind, String value]) {
-    if ((kind != null && _token.kind != kind)
-        || (value != null && _token.value != value)) {
-      throw new ParseException("Expected $value: $_token");
+    if ((kind != null && (_token == null || _token.kind != kind))
+        || (value != null && (_token == null || _token.value != value))) {
+      throw new ParseException("Expected kind $kind ($value): $_token");
     }
-    _token = _iterator.moveNext() ? _iterator.current : null;
+    _iterator.moveNext();
   }
 
   Expression _parseExpression() {
@@ -52,23 +55,29 @@ class Parser {
       if (_token.kind == GROUPER_TOKEN) {
         if (_token.value == '(') {
           var args = _parseArguments();
+          assert(args != null);
           left = _astFactory.invoke(left, null, args);
         } else if (_token.value == '[') {
           var indexExpr = _parseIndex();
-          var args = indexExpr == null ? [] : [indexExpr];
-          left = _astFactory.invoke(left, '[]', args);
+          left = _astFactory.index(left, indexExpr);
         } else {
           break;
         }
       } else if (_token.kind == DOT_TOKEN) {
         _advance();
         var right = _parseUnary();
-        left = _makeInvoke(left, right);
-      } else if (_token.kind == KEYWORD_TOKEN && _token.value == 'in') {
-        left = _parseComprehension(left);
+        left = _makeInvokeOrGetter(left, right);
+      } else if (_token.kind == KEYWORD_TOKEN) {
+        if (_token.value == 'in') {
+          left = _parseInExpression(left);
+        } else if (_token.value == 'as') {
+          left = _parseAsExpression(left);
+        } else {
+          break;
+        }
       } else if (_token.kind == OPERATOR_TOKEN
           && _token.precedence >= precedence) {
-        left = _parseBinary(left);
+        left = _token.value == '?' ? _parseTernary(left) : _parseBinary(left);
       } else {
         break;
       }
@@ -76,9 +85,10 @@ class Parser {
     return left;
   }
 
-  Invoke _makeInvoke(left, right) {
+  // invoke or getter
+  Expression _makeInvokeOrGetter(left, right) {
     if (right is Identifier) {
-      return _astFactory.invoke(left, right.value);
+      return _astFactory.getter(left, right.value);
     } else if (right is Invoke && right.receiver is Identifier) {
       Identifier method = right.receiver;
       return _astFactory.invoke(left, method.value, right.arguments);
@@ -89,6 +99,9 @@ class Parser {
 
   Expression _parseBinary(left) {
     var op = _token;
+    if (!_BINARY_OPERATORS.contains(op.value)) {
+      throw new ParseException("unknown operator: ${op.value}");
+    }
     _advance();
     var right = _parseUnary();
     while (_token != null
@@ -118,9 +131,19 @@ class Parser {
         _advance();
         var expr = _parsePrecedence(_parsePrimary(), POSTFIX_PRECEDENCE);
         return _astFactory.unary(value, expr);
+      } else {
+        throw new ParseException("unexpected token: $value");
       }
     }
     return _parsePrimary();
+  }
+
+  Expression _parseTernary(condition) {
+    _advance(OPERATOR_TOKEN, '?');
+    var trueExpr = _parseExpression();
+    _advance(COLON_TOKEN);
+    var falseExpr = _parseExpression();
+    return _astFactory.ternary(condition, trueExpr, falseExpr);
   }
 
   Expression _parsePrimary() {
@@ -132,10 +155,10 @@ class Parser {
           _advance();
           // TODO(justin): return keyword node
           return _astFactory.identifier('this');
-        } else if (keyword == 'in') {
-          return null;
+        } else if (KEYWORDS.contains(keyword)) {
+          throw new ParseException('unexpected keyword: $keyword');
         }
-        throw new ArgumentError('unrecognized keyword: $keyword');
+        throw new ParseException('unrecognized keyword: $keyword');
       case IDENTIFIER_TOKEN:
         return _parseInvokeOrIdentifier();
       case STRING_TOKEN:
@@ -149,11 +172,28 @@ class Parser {
           return _parseParenthesized();
         } else if (_token.value == '{') {
           return _parseMapLiteral();
+        } else if (_token.value == '[') {
+          return _parseListLiteral();
         }
         return null;
+      case COLON_TOKEN:
+        throw new ParseException('unexpected token ":"');
       default:
         return null;
     }
+  }
+
+  ListLiteral _parseListLiteral() {
+    var items = [];
+    do {
+      _advance();
+      if (_token.kind == GROUPER_TOKEN && _token.value == ']') {
+        break;
+      }
+      items.add(_parseExpression());
+    } while(_token != null && _token.value == ',');
+    _advance(GROUPER_TOKEN, ']');
+    return new ListLiteral(items);
   }
 
   MapLiteral _parseMapLiteral() {
@@ -176,7 +216,7 @@ class Parser {
     return _astFactory.mapLiteralEntry(key, value);
   }
 
-  InExpression _parseComprehension(Expression left) {
+  InExpression _parseInExpression(Expression left) {
     assert(_token.value == 'in');
     if (left is! Identifier) {
       throw new ParseException(
@@ -185,6 +225,17 @@ class Parser {
     _advance();
     var right = _parseExpression();
     return _astFactory.inExpr(left, right);
+  }
+
+  AsExpression _parseAsExpression(Expression left) {
+    assert(_token.value == 'as');
+    _advance();
+    var right = _parseExpression();
+    if (right is! Identifier) {
+      throw new ParseException(
+          "'as' statements must end with an identifier");
+    }
+    return _astFactory.asExpr(left, right);
   }
 
   Expression _parseInvokeOrIdentifier() {
@@ -207,12 +258,6 @@ class Parser {
     } else {
       return _astFactory.invoke(identifier, null, args);
     }
-  }
-
-  Invoke _parseInvoke() {
-    var identifier = _parseIdentifier();
-    var args = _parseArguments();
-    return _astFactory.invoke(null, identifier, args);
   }
 
   Identifier _parseIdentifier() {
