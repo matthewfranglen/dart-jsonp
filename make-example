@@ -1,59 +1,39 @@
 #!/bin/zsh
 # This will prepare the example for serving via github.
 # This will:
-# * Compile the dart code
 # * Compile the javascript code
 # * Fix the packages folder in example
 
 ROOT_FOLDER=${0:A:h}
-EXAMPLE_FOLDER=${ROOT_FOLDER}/example
-BUILD_FOLDER=${EXAMPLE_FOLDER}/out
-PACKAGES_FOLDER=${EXAMPLE_FOLDER}/packages
-ROOT_PACKAGES_FOLDER=${ROOT_FOLDER}/packages
+SOURCE_FOLDER=${ROOT_FOLDER}/example
+BUILD_FOLDER=${ROOT_FOLDER}/build
+TARGET_FOLDER=${SOURCE_FOLDER}/out
 
 function clean () {
     [ -e ${BUILD_FOLDER} ] && rm -rf ${BUILD_FOLDER}
-    [ -e ${PACKAGES_FOLDER} ] && rm -rf ${PACKAGES_FOLDER}
+    [ -e ${TARGET_FOLDER} ] && rm -rf ${TARGET_FOLDER}
     pub install && pub update
-}
-
-function compile_dart () {
-    (
-        cd ${EXAMPLE_FOLDER}
-        dart build.dart
-    )
-
-    # This DOES NOT put jsonp in the example/out/packages folder that is
-    # generated. Since this library cannot be referenced as a dependency in
-    # it's own pubspec.yaml, and I don't want a single project to have two
-    # definitions, the best I can do is patch over it.
-    [ ! -e ${BUILD_FOLDER}/packages/jsonp ] && cp -r ${ROOT_FOLDER}/lib ${BUILD_FOLDER}/packages/jsonp
 }
 
 function compile_javascript () {
     (
-        cd ${BUILD_FOLDER}/web
-        dart2js -o example.html_bootstrap.dart.js example.html_bootstrap.dart
+        cd ${ROOT_FOLDER}
+        pub build --output ${BUILD_FOLDER} example
     )
 }
 
 function fix_layout () {
-    # The example.html file used to be in the out directory directly. This
-    # should be preserved, so the following dance needs to happen:
-    # 1) Remove example/packages
-    # 2) Move example/out/packages to example/packages
-    # 3) Move example/out/web somewhere
-    # 4) Remove example/out
-    # 5) Move the old example/out/web to example/out
-    rm ${PACKAGES_FOLDER}
+    # The build generates a ${BUILD_FOLDER}/example which is a rough duplicate
+    # of the example folder. The packages for this is directly within, but the
+    # code that uses them is within web. So things must be moved.
 
-    mv ${BUILD_FOLDER}/packages ${PACKAGES_FOLDER}
-    mv ${BUILD_FOLDER}/web ${EXAMPLE_FOLDER}/out-tmp
-    rmdir ${BUILD_FOLDER}
-    mv ${EXAMPLE_FOLDER}/out-tmp ${BUILD_FOLDER}
+    mv ${BUILD_FOLDER}/example/web ${TARGET_FOLDER}
+    mv ${BUILD_FOLDER}/example/packages ${TARGET_FOLDER}
+
+    rm -rf ${BUILD_FOLDER}
 }
 
 clean
-compile_dart && compile_javascript && fix_layout
+compile_javascript && fix_layout
 
 # vim: set ai et sw=4 syntax=zsh :
