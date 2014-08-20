@@ -3,6 +3,82 @@ Dart JSONP
 
 JSONP handler for Dartlang. Allows you to make individual and multiple requests, as well as providing some support for automatically converting the responses to Dart classes.
 
+General Note
+------------
+
+This library is not required because you can make JSONP requests very easily with pure Dart.
+
+Using javascript has become significantly easier since this was originally written. To perform a JSONP request without using this library is as easy as:
+
+    import 'dart:html';
+    import 'dart:js';
+
+    context['callbackMethod'] = (response) {
+      // Do something with the response object.
+      // The response has already been interpreted as a JSON string.
+    }
+
+    document.body.children.add(
+        new Element.tag('script')
+          ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
+      );
+
+To get a Future for this do the following:
+
+    import 'dart:async';
+    import 'dart:html';
+    import 'dart:js';
+
+    Completer callbackCompleter = new Completer();
+
+    context['callbackMethod'] = (response) {
+      callbackCompleter.complete(response);
+    }
+
+    document.body.children.add(
+        new Element.tag('script')
+          ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
+      );
+    callbackCompleter.future.then((response) {
+      // Do something with the response object.
+      // The response has already been interpreted as a JSON string.
+    });
+
+The javascript method does not break after the first use, so you can repeatedly call it:
+
+    import 'dart:async';
+    import 'dart:html';
+    import 'dart:js';
+
+    Completer callbackCompleter;
+    Element scriptTag;
+
+    context['callbackMethod'] = (response) {
+      scriptTag.remove();
+      callbackCompleter.complete(response);
+    }
+
+    Future update() {
+      callbackCompleter = new Completer();
+      scriptTag = new Element.tag('script')
+            ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod';
+
+      document.body.children.add(scriptTag);
+
+      return callbackCompleter.future;
+    }
+
+    void repeat() {
+      update().then((response) {
+        // Do something with the response object.
+        // The response has already been interpreted as a JSON string.
+
+        new Future(new Duration(seconds: 5), repeat);
+      });
+    }
+
+There is an example of using JSONP [here](https://www.dartlang.org/samples/jsonp/) with source code. You can read more about Dart Javascript interoperability [here](https://www.dartlang.org/articles/js-dart-interop/).
+
 Usage
 ------
 
