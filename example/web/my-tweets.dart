@@ -39,8 +39,8 @@ class User {
 
   User(this.imageUrl, this.name);
   User.fromProxy(var data) :
-    imageUrl = data.profile_image_url,
-    name = data.name;
+    imageUrl = data['profile_image_url'],
+    name = data['name'];
 }
 
 /**
@@ -54,7 +54,7 @@ class Tweet {
 
   Tweet(this.user, this.tweet, this.timestamp);
   Tweet.fromProxy(var data) :
-    user = new User.fromProxy(data.user),
-    tweet = data.text,
-    timestamp = data.created_at;
+    user = new User.fromProxy(data['user']),
+    tweet = data['text'],
+    timestamp = data['created_at'];
 }
