@@ -11,13 +11,14 @@ TARGET_FOLDER=${SOURCE_FOLDER}/out
 
 function clean () {
     [ -e ${BUILD_FOLDER} ] && rm -rf ${BUILD_FOLDER}
+    [ -e ${TARGET_FOLDER} ] && rm -rf ${TARGET_FOLDER}
     pub install && pub update
 }
 
 function compile_javascript () {
     (
         cd ${ROOT_FOLDER}
-        pub build --output ${BUILD_FOLDER} --mode debug example
+        pub build --output ${BUILD_FOLDER} --mode ${1} example
     )
 }
 
@@ -35,6 +36,6 @@ function fix_layout () {
 }
 
 clean
-compile_javascript && fix_layout
+compile_javascript ${1:-release} && fix_layout
 
 # vim: set ai et sw=4 syntax=zsh :
