@@ -4,7 +4,7 @@ import 'ext_test.dart';
 
 import 'dart:async';
 import 'package:unittest/unittest.dart';
-import 'package:unittest/mock.dart';
+import 'package:mock/mock.dart';
 
 /**
  * This class just encapsulates some test data which can be passed through the
