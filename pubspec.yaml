@@ -6,6 +6,7 @@ description: Read from jsonp enabled websites
 dev_dependencies:
   polymer: any
   unittest: any
+  mock: any
 transformers:
 - polymer:
     entry_points:
