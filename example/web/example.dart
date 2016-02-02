@@ -4,7 +4,7 @@ import 'dart:html';
 
 // The twitter feed to follow. Try out different ones (you can check them in
 // your browser).
-var _seth_ladd = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=?';
+var _seth_ladd = 'https://twitter.com/1.1/status/user_timeline.json?user=sethladd&format=json&callback=?';
 
 // Current page, which assumes a count of 1, so really this is the current
 // tweet.
