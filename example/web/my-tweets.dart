@@ -21,6 +21,10 @@ class MyTweetsElement extends PolymerElement {
     }
   }
 
+  void fail() {
+    tweets.add(FAIL_TWEET);
+  }
+
   void add(Tweet tweet) {
     tweets.add(tweet);
   }
@@ -55,3 +59,10 @@ class Tweet {
     tweet = data['text'],
     timestamp = data['created_at'];
 }
+
+User SETH_LADD = new User('img/fail.png', 'Failed');
+Tweet FAIL_TWEET = new Tweet(
+  SETH_LADD,
+  'The JSONP request failed. Twitter require authentication for such requests. Seth Ladd did not post this message',
+  'Never'
+);
