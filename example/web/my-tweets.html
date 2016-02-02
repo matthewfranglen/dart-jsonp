@@ -5,7 +5,7 @@
     <template repeat="{{ tweet in tweets }}">
         <div class="row">
             <div class="span2">
-                <img class="tweet-user-img img-rounded" src="{{ tweet.user.imageUrl }}" />
+                <img class="tweet-user-img img-rounded" _src="{{ tweet.user.imageUrl }}" />
                 <p class="tweet-user-name">{{ tweet.user.name }}</p>
             </div>
             <div class="span8">
@@ -15,8 +15,6 @@
             </div>
         </div>
     </template>
-    <link href="css/bootstrap.css" rel="stylesheet">
-    <link href="css/bootstrap-responsive.css" rel="stylesheet">
     <style>
       .tweet-user-img {
         margin-top: 1em;
