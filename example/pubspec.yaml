@@ -1,1 +1,12 @@
-../pubspec.yaml
+name: jsonp_example
+version: 1.0.5
+author: Matthew Franglen <matthew.franglen@gmail.com>
+homepage: https://github.com/matthewfranglen/dart-jsonp
+description: Read from jsonp enabled websites
+dependencies:
+  jsonp: any
+  polymer: any
+transformers:
+- polymer:
+    entry_points:
+      - web/example.html
