@@ -6,4 +6,4 @@ description: Read from jsonp enabled websites
 dev_dependencies:
   polymer: any
   unittest: any
-  mock: any
+  mockito: any

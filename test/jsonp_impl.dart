@@ -4,7 +4,7 @@ import 'ext_test.dart';
 
 import 'dart:async';
 import 'package:unittest/unittest.dart';
-import 'package:mock/mock.dart';
+import 'package:mockito/mockito.dart';
 
 /**
  * This class just encapsulates some test data which can be passed through the
@@ -41,10 +41,10 @@ test_once () {
     Completer completer;
 
     js = new JavascriptMock();
-    js.when(callsTo('makeOnceCallback')).thenCall((_callback, _completer) => completer = _completer, 2);
+    when(js.makeOnceCallback()).thenAnswer((_callback, _completer) => completer = _completer);
 
     html = new HtmlMock();
-    html.when(callsTo('request')).thenCall((url) => completer.complete(data.toProxy()), 2);
+    when(html.request()).thenAnswer((url) => completer.complete(data.toProxy()));
 
     ext = new External.dynamic(js, html);
   }
@@ -71,7 +71,7 @@ test_once_exception () {
     HtmlMock html;
 
     js = new JavascriptMock();
-    js.when(callsTo('makeOnceCallback')).alwaysThrow(new Exception());
+    when(js.makeOnceCallback()).thenAnswer(() => throw new Exception());
     html = new HtmlMock();
 
     ext = new External.dynamic(js, html);
@@ -87,7 +87,7 @@ test_once_exception () {
 
     js = new JavascriptMock();
     html = new HtmlMock();
-    html.when(callsTo('request')).alwaysThrow(new Exception());
+    when(html.request()).thenAnswer(() => throw new Exception());
 
     ext = new External.dynamic(js, html);
   }
@@ -110,10 +110,10 @@ test_many () {
     StreamController stream;
 
     js = new JavascriptMock();
-    js.when(callsTo('makeManyCallback')).thenCall((_callback, _stream) => stream = _stream, 2);
+    when(js.makeManyCallback()).thenAnswer((_callback, _stream) => stream = _stream);
 
     html = new HtmlMock();
-    html.when(callsTo('request')).thenCall((url) => stream.add(data.toProxy()), 2);
+    when(html.request()).thenAnswer((url) => stream.add(data.toProxy()));
 
     ext = new External.dynamic(js, html);
   }
@@ -162,7 +162,7 @@ test_many_exception () {
 
     js = new JavascriptMock();
     html = new HtmlMock();
-    html.when(callsTo('request')).alwaysThrow(new Exception());
+    when(html.request()).thenAnswer(() => throw new Exception());
 
     ext = new External.dynamic(js, html);
   }
