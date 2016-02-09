@@ -1,7 +1,6 @@
 library jsonp.handlers;
 
 import 'dart:async';
-import 'dart:mirrors';
 import 'external.dart' show External;
 
 class CallbackHandler {
@@ -24,16 +23,6 @@ class CallbackHandler {
    * Adds the javascript to the page which will trigger the request.
    */
   void request(String generator(String callback)) => external.html.request(generator(callback));
-
-  /**
-   * Converts the data to the provided type. Also handles releasing the data, so
-   * this can be put after the regular stream or future for a fat comma call with
-   * no problems.
-   */
-  Object convert(Type type, var data) {
-    InstanceMirror result = reflectClass(type).newInstance(const Symbol('fromProxy'), [data]);
-    return result.reflectee;
-  }
 }
 
 /**
@@ -47,9 +36,7 @@ class Once extends CallbackHandler {
     external.js.makeOnceCallback(callback, _completer);
   }
 
-  Future future({Type type: null}) => type == null
-                                    ? _completer.future
-                                    : _completer.future.then((var data) => convert(type, data));
+  Future future() => _completer.future;
 }
 
 /**
@@ -94,11 +81,7 @@ class Many extends CallbackHandler {
   /**
    * The stream is the primary value of this, make it easy to get.
    */
-  Stream stream({Type type: null}) => type == null
-                                    ? _stream.stream
-                                    : _stream.stream.transform(new StreamTransformer<dynamic, Object>.fromHandlers(
-                                        handleData: (var data, EventSink<Object> sink) => sink.add(convert(type, data))
-                                      ));
+  Stream stream() => _stream.stream;
 
   /**
    * Adds an error to the stream.
