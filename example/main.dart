@@ -10,14 +10,24 @@ main () {
     ..handleError(prefixCallback('Stream error: '));
 
   fetch(uri: brokenUrl)
-    .then(prefixCallback('Future received: '), onError: prefixCallback('Future error: '));
+    .then(
+      prefixCallback('Future received: '),
+      onError: prefixCallback('Future error: ')
+    );
 
   fetch(uri: workingUrl)
-    .then(prefixCallback('Future received: '), onError: prefixCallback('Future error: '));
+    .then(
+      prefixCallback('Future received: '),
+      onError: prefixCallback('Future error: ')
+    );
 
-  fetchMany(streamCallback, uri: brokenUrl);
-  fetchMany(streamCallback, uri: workingUrl);
+  // fetchMany(streamCallback, uri: brokenUrl);
+  // fetchMany(streamCallback, uri: workingUrl);
 }
 
-dynamic prefixCallback(var prefix) =>
-  (value) => print(prefix + value);
+dynamic prefixCallback(var preamble) {
+  return (value) {
+    print(preamble);
+    print(value);
+  };
+}

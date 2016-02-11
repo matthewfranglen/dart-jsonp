@@ -38,7 +38,10 @@ class Once extends CallbackHandler {
   final ScriptElement script = new ScriptElement();
 
   Once() : super(_generateId()) {
-    js.context[callback] = this.complete;
+    js.context[callback] = (result) {
+      dispose();
+      _completer.complete(result);
+    };
     script.onError.listen(this.error);
   }
 
@@ -56,12 +59,12 @@ class Once extends CallbackHandler {
 
   void complete(js.JsObject result) {
     dispose();
-    completer.complete(result);
+    _completer.complete(result);
   }
 
   void error(e) {
     dispose();
-    completer.completeError(e);
+    _completer.completeError(e);
   }
 
 }

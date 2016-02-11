@@ -20,11 +20,13 @@ import 'src/jsonp_impl.dart' as impl;
  * defined $url):
  * (callback) => "$url?callback=$callback"
  */
-Future fetch({String uri: null, String uriGenerator(String callback): null}) =>
-  impl.fetch(
+Future fetch({String uri: null, String uriGenerator(String callback): null}) {
+  print("woo fetch " + uri);
+  return impl.fetch(
       uri: uri,
       uriGenerator: uriGenerator
     );
+}
 
 /**
  * This will allow you to make repeated requests and have all of the responses
@@ -41,15 +43,20 @@ Future fetch({String uri: null, String uriGenerator(String callback): null}) =>
  * You can get the named stream without making an associated request by just
  * asking without indicating a url to retrieve.
  */
-Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null}) =>
-    impl.fetchMany(
-        stream,
-        uri: uri,
-        uriGenerator: uriGenerator
-      );
+Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null}) {
+  print("woo stream " + stream);
+  return impl.fetchMany(
+      stream,
+      uri: uri,
+      uriGenerator: uriGenerator
+    );
+}
 
 /**
  * This will release the resources associated with the stream. If you create
  * many short lived streams then you should call this or you will leak memory.
  */
-void disposeMany(String stream) => impl.disposeMany(stream);
+void disposeMany(String stream) {
+  print("bye");
+  impl.disposeMany(stream);
+}
