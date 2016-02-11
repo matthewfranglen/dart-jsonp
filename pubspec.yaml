@@ -5,5 +5,3 @@ homepage: https://github.com/matthewfranglen/dart-jsonp
 description: Read from jsonp enabled websites
 dev_dependencies:
   polymer: any
-  unittest: any
-  mockito: any
