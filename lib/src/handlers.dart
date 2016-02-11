@@ -66,26 +66,6 @@ class Once extends CallbackHandler {
 
 }
 
-class _ManyManager {
-  // All created streams are in this map.
-  static final Map<String, Many> _streams = new Map<String, Many>();
-
-  static Many getMany(String callback) {
-    if (! _streams.containsKey(callback)) {
-      _streams[callback] = new Many._Impl(callback);
-    }
-    return _streams[callback];
-  }
-
-  static dispose(String callback) {
-    if (_streams.containsKey(callback)) {
-      _streams[callback]._dispose();
-      _streams.remove(callback);
-    }
-  }
-
-}
-
 /**
  * This provides a repeatable callback as a Stream.
  */
@@ -124,6 +104,26 @@ class Many extends CallbackHandler {
   void dispose() {
     super.dispose();
     _stream.close();
+  }
+
+}
+
+class _ManyManager {
+  // All created streams are in this map.
+  static final Map<String, Many> _streams = new Map<String, Many>();
+
+  static Many getMany(String callback) {
+    if (! _streams.containsKey(callback)) {
+      _streams[callback] = new Many._Impl(callback);
+    }
+    return _streams[callback];
+  }
+
+  static dispose(String callback) {
+    if (_streams.containsKey(callback)) {
+      _streams[callback]._dispose();
+      _streams.remove(callback);
+    }
   }
 
 }
