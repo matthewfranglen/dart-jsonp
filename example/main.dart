@@ -6,8 +6,10 @@ var streamCallback = 'jsonp_stream_callback';
 
 main () {
   fetchMany(streamCallback)
-    ..forEach(prefixCallback('Stream received: '))
-    ..handleError(prefixCallback('Stream error: '));
+    .listen(
+      prefixCallback('Stream received: '),
+      onError: prefixCallback('Stream error: ')
+    );
 
   fetch(uri: brokenUrl)
     .then(
@@ -21,8 +23,8 @@ main () {
       onError: prefixCallback('Future error: ')
     );
 
-  // fetchMany(streamCallback, uri: brokenUrl);
-  // fetchMany(streamCallback, uri: workingUrl);
+  fetchMany(streamCallback, uri: brokenUrl);
+  fetchMany(streamCallback, uri: workingUrl);
 }
 
 dynamic prefixCallback(var preamble) {
