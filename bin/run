@@ -1,0 +1,40 @@
+#!/bin/sh
+
+COMMAND=`readlink -f "${0}"`
+BIN_FOLDER=`dirname "${COMMAND}"`
+ROOT_FOLDER=`dirname "${BIN_FOLDER}"`
+
+main () {
+  if ! validate_environment
+  then
+    echo "This requires docker" >&2
+    exit 1
+  fi
+
+  cd "${ROOT_FOLDER}"
+
+  build_docker_image &&
+    run_docker_image
+}
+
+validate_environment () {
+  docker ps >/dev/null 2>&1
+}
+
+build_docker_image () {
+  echo "Building docker image..."
+
+  docker build --tag matthewfranglen/dart-jsonp .
+}
+
+run_docker_image () {
+  echo "Running docker image..."
+  echo "View the site at:"
+  echo "http://localhost:8080"
+  echo "Stop the container with:"
+  echo "docker kill jsonp"
+
+  docker run --rm -p 8080:8080 --name jsonp matthewfranglen/dart-jsonp >/dev/null
+}
+
+main

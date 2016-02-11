@@ -38,20 +38,20 @@ When you use _fetch_ to request a URL a future will be returned. This future wil
 
 #### Type Conversion
 
-The proxy objects can be time consuming to handle, as you don't get things like autocompletion for proxy fields. Automatically converting the proxy objects to classes is quite easy, but depends on the class having a _fromProxy_ method:
+The proxy objects can be time consuming to handle, as you don't get things like autocompletion for proxy fields. It's best to wrap the data in an object and then return that from your method:
 
     class ExampleData {
       var data;
 
-      static fromProxy(var proxy) {
+      fromProxy(var proxy) {
         this.data = proxy['data'];
       }
     }
 
     jsonp.fetch(
-        uri: "http://example.com/rest/object/1?callback=?",
-        Type: ExampleData
+        uri: "http://example.com/rest/object/1?callback=?"
       )
+      .then((var proxy) => new ExampleData.fromProxy(proxy))
       .then((ExampleData object) => print(object.data));
 
 ### Many Requests
@@ -96,11 +96,12 @@ By default the Stream provides the response from the JSONP request.
 
 #### Type Conversion
 
-The automatic type conversion is also available. Each call to _fetchMany_ can choose to set a type which will alter the returned stream (basically, you don't need to specify the type unless you actually use the stream).
+Converting the type of your stream is also straight forward. You can convert the values on demand by mapping the stream, which returns a typed stream:
 
     Stream<ExampleData> example_stream = jsonp.fetchMany(
-        "object", type: ExampleData
-      );
+        "object"
+      )
+      .map((var proxy) => new ExampleData.fromProxy(proxy));
 
     example_stream.forEach(
         (ExampleData object) => print("Received ${object.data}")
@@ -120,15 +121,9 @@ The automatic type conversion is also available. Each call to _fetchMany_ can ch
 Examples
 --------
 
-A pre built version of the example can be viewed [here](http://matthewfranglen.github.io/dart-jsonp/example/out/example.html). It has been converted to javascript.
-
-### Compiling
-
-An example of using the library can be found in the examples folder. This example uses the web_ui package to handle displaying the returned content. **This means it must be compiled**.
-
-To get the required packages you may have to run pub install in the root of the library. Once you have the packages installed, you can then run the build script from within the example folder (right click run in the editor is fine).
-
-After building you can view the example at _out/example.html_ in Dartium.
+An example of using the library can be found in the examples folder. This
+example makes some calls to working and broken jsonp endpoints. The results are
+printed in the console.
 
 General Note
 ------------
@@ -145,8 +140,8 @@ Using javascript has become significantly easier since this was originally writt
     }
 
     document.body.children.add(
-        new Element.tag('script')
-          ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
+        new ScriptElement()
+          ..src = 'http://some.service/?callback=callbackMethod'
       );
 
 To get a Future for this do the following:
@@ -159,49 +154,17 @@ To get a Future for this do the following:
 
     context['callbackMethod'] = (response) {
       callbackCompleter.complete(response);
+
+      // if you just want to use this once, then you can clear the callback method:
+      context['callbackMethod'] = null;
     }
 
     document.body.children.add(
-        new Element.tag('script')
-          ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod'
+        new ScriptElement()
+          ..src = 'http://some.service/?callback=callbackMethod'
       );
     callbackCompleter.future.then((JsObject response) {
       // Do something with the response object. The JsObject can be treated like a dictionary.
     });
 
-The javascript method does not break after the first use, so you can repeatedly call it:
-
-    import 'dart:async';
-    import 'dart:html';
-    import 'dart:js';
-
-    Completer callbackCompleter;
-    Element scriptTag;
-
-    context['callbackMethod'] = (response) {
-      scriptTag.remove();
-      callbackCompleter.complete(response);
-    }
-
-    Future update() {
-      callbackCompleter = new Completer();
-      scriptTag = new Element.tag('script')
-            ..src = 'https://twitter.com/status/user_timeline/sethladd?format=json&callback=callbackMethod';
-
-      document.body.children.add(scriptTag);
-
-      return callbackCompleter.future;
-    }
-
-    void repeat() {
-      update().then((JsObject response) {
-        // Do something with the response object. The JsObject can be treated like a dictionary.
-
-        new Future(new Duration(seconds: 5), repeat);
-      });
-    }
-
-There is an example of using JSONP [here](https://www.dartlang.org/samples/jsonp/) with source code.
-
 You can read more about Dart Javascript interoperability [here](https://www.dartlang.org/articles/js-dart-interop/).
-

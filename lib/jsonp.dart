@@ -2,19 +2,61 @@ library jsonp;
 
 import 'dart:async';
 import 'src/jsonp_impl.dart' as impl;
-import 'src/external.dart';
-import 'src/ext_web.dart';
 
-Future fetch({String uri: null, String uriGenerator(String callback): null, Type type: null}) =>
-  impl.fetch(
-      const External(const JavascriptImpl(), const HtmlImpl()),
-      uri: uri, uriGenerator: uriGenerator, type: type
+/**
+ * Returns a future that will complete with the data from the jsonp endpoint.
+ * This will return a JsObject.
+ *
+ * This takes a url which includes a query parameter that has a value of [?].
+ * This value will be replaced with the callback method name. There must be at
+ * least one such parameter in the url.
+ *
+ * If you require a url of a different form then you can use the url generator
+ * parameter. This allows you to pass a function which will be called with the
+ * callback name. Use this to create and return the url according to any rules
+ * or requirements.
+ *
+ * Usually something like the following is sufficient (assuming you have
+ * defined $url):
+ * (callback) => "$url?callback=$callback"
+ */
+Future fetch({String uri: null, String uriGenerator(String callback): null}) {
+  print("woo fetch " + uri);
+  return impl.fetch(
+      uri: uri,
+      uriGenerator: uriGenerator
     );
+}
 
-Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) =>
-    impl.fetchMany(
-        const External(const JavascriptImpl(), const HtmlImpl()),
-        stream, uri: uri, uriGenerator: uriGenerator, type: type
-      );
+/**
+ * This will allow you to make repeated requests and have all of the responses
+ * come back down the same stream. The order of the responses is not
+ * guaranteed.
+ *
+ * As this is a long running operation, the stream should be disposed of
+ * properly when you are finished working with it, otherwise you will leak
+ * memory. You can release a stream using the disposeMany(stream) method.
+ *
+ * The stream that is returned by this operates in the same way as the get(...)
+ * Futures and their values.
+ *
+ * You can get the named stream without making an associated request by just
+ * asking without indicating a url to retrieve.
+ */
+Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null}) {
+  print("woo stream " + stream);
+  return impl.fetchMany(
+      stream,
+      uri: uri,
+      uriGenerator: uriGenerator
+    );
+}
 
-void disposeMany(String stream) => impl.disposeMany(stream);
+/**
+ * This will release the resources associated with the stream. If you create
+ * many short lived streams then you should call this or you will leak memory.
+ */
+void disposeMany(String stream) {
+  print("bye");
+  impl.disposeMany(stream);
+}
