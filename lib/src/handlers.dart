@@ -96,7 +96,10 @@ class Many extends CallbackHandler {
   Stream stream() => _stream.stream;
 
   void request(String generator(String callback)) {
-    ScriptElement script = new ScriptElement()
+    // This adds scripts which build up in the dom, but cannot be effectively
+    // removed while having a single callback. Could have multiple callbacks.
+
+    ScriptElement script = new ScriptElement();
     script.src = generator(callback);
     script.onError.listen(this.error);
     document.body.nodes.add(script);
