@@ -21,12 +21,12 @@ import 'external.dart';
  * defined $url):
  * (callback) => "$url?callback=$callback"
  */
-Future fetch(External external, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+Future fetch(External external, {String uri: null, String uriGenerator(String callback): null}) {
   try {
     final Once once = new Once(external);
 
     once.request((String callback) => _generate_url(uri, uriGenerator, callback));
-    return once.future(type: type);
+    return once.future();
   }
   catch (e) {
     return new Future.error(e);
@@ -48,7 +48,7 @@ Future fetch(External external, {String uri: null, String uriGenerator(String ca
  * You can get the named stream without making an associated request by just
  * asking without indicating a url to retrieve.
  */
-Stream fetchMany(External external, String stream, {String uri: null, String uriGenerator(String callback): null, Type type: null}) {
+Stream fetchMany(External external, String stream, {String uri: null, String uriGenerator(String callback): null}) {
   final Many many = new Many(external, stream);
 
   if (uri != null || uriGenerator != null) {
@@ -59,7 +59,7 @@ Stream fetchMany(External external, String stream, {String uri: null, String uri
       many.error(e);
     }
   }
-  return many.stream(type: type);
+  return many.stream();
 }
 
 /**
