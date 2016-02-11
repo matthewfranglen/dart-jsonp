@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:html';
 import 'dart:js' as js;
 
-static int _count = 0;
+int _count = 0;
 
 // Each call to this will return a different id. The return value can be used as the callback name.
 String _generateId() {
@@ -66,14 +66,11 @@ class Once extends CallbackHandler {
 
 }
 
-/**
- * This provides a repeatable callback as a Stream.
- */
-class Many extends CallbackHandler {
+class _ManyManager {
   // All created streams are in this map.
   static final Map<String, Many> _streams = new Map<String, Many>();
 
-  factory Many(String callback) {
+  static Many getMany(String callback) {
     if (! _streams.containsKey(callback)) {
       _streams[callback] = new Many._Impl(callback);
     }
@@ -87,9 +84,20 @@ class Many extends CallbackHandler {
     }
   }
 
+}
+
+/**
+ * This provides a repeatable callback as a Stream.
+ */
+class Many extends CallbackHandler {
+
   StreamController _stream = new StreamController();
 
-  Many._Impl(this.callback) : super(callback) {
+  factory Many(var callback) {
+    return _ManyManager.getMany(callback);
+  }
+
+  Many._Impl(var callback) : super(callback) {
     js.context[callback] = this.complete;
   }
 
