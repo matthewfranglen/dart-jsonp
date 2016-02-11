@@ -121,15 +121,9 @@ Converting the type of your stream is also straight forward. You can convert the
 Examples
 --------
 
-A pre built version of the example can be viewed [here](http://matthewfranglen.github.io/dart-jsonp/example/out/example.html). It has been converted to javascript.
-
-### Compiling
-
-An example of using the library can be found in the examples folder. This example uses the web_ui package to handle displaying the returned content. **This means it must be compiled**.
-
-To get the required packages you may have to run pub install in the root of the library. Once you have the packages installed, you can then run the build script from within the example folder (right click run in the editor is fine).
-
-After building you can view the example at _out/example.html_ in Dartium.
+An example of using the library can be found in the examples folder. This
+example makes some calls to working and broken jsonp endpoints. The results are
+printed in the console.
 
 General Note
 ------------
