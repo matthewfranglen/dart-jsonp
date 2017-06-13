@@ -21,7 +21,7 @@ abstract class CallbackHandler {
 
   void complete(js.JsObject result);
 
-  void error(var error);
+  void error(Event error);
 
   void dispose() {
     js.context.deleteProperty(callback);
