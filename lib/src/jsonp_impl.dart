@@ -30,7 +30,7 @@ Stream fetchMany(String stream, {String uri: null, String uriGenerator(String ca
 }
 
 void disposeMany(String stream) {
-  Many.dispose(stream);
+  Many.disposeMany(stream);
 }
 
 // Transforms the uri, uriGenerator and callback into the callable url.
