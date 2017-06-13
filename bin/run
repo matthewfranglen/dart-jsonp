@@ -24,7 +24,7 @@ validate_environment () {
 build_docker_image () {
   echo "Building docker image..."
 
-  docker build --tag matthewfranglen/dart-jsonp .
+  docker build --tag matthewfranglen/dart-jsonp --no-cache .
 }
 
 run_docker_image () {
