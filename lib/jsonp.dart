@@ -21,7 +21,6 @@ import 'src/jsonp_impl.dart' as impl;
  * (callback) => "$url?callback=$callback"
  */
 Future fetch({String uri: null, String uriGenerator(String callback): null}) {
-  print("woo fetch " + uri);
   return impl.fetch(
       uri: uri,
       uriGenerator: uriGenerator
@@ -44,7 +43,6 @@ Future fetch({String uri: null, String uriGenerator(String callback): null}) {
  * asking without indicating a url to retrieve.
  */
 Stream fetchMany(String stream, {String uri: null, String uriGenerator(String callback): null}) {
-  print("woo stream " + stream);
   return impl.fetchMany(
       stream,
       uri: uri,
@@ -57,6 +55,5 @@ Stream fetchMany(String stream, {String uri: null, String uriGenerator(String ca
  * many short lived streams then you should call this or you will leak memory.
  */
 void disposeMany(String stream) {
-  print("bye");
   impl.disposeMany(stream);
 }
