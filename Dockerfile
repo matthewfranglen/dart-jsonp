@@ -13,6 +13,8 @@ ADD ./lib /app/lib
 ADD ./example /app/example
 RUN pub get --offline
 
+RUN dartanalyzer --strong lib/jsonp.dart
+
 RUN pub build example
 
 CMD ["pub", "serve", "example", "--port=8080", "--hostname=0.0.0.0"]
