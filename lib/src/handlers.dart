@@ -109,6 +109,9 @@ class Many extends CallbackHandler {
     _stream.close();
   }
 
+  static disposeMany(String stream) {
+    _ManyManager.dispose(stream);
+  }
 }
 
 class _ManyManager {
@@ -124,7 +127,7 @@ class _ManyManager {
 
   static dispose(String callback) {
     if (_streams.containsKey(callback)) {
-      _streams[callback]._dispose();
+      _streams[callback].dispose();
       _streams.remove(callback);
     }
   }
