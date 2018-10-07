@@ -3,3 +3,5 @@ version: 2.1.0
 author: Matthew Franglen <matthew.franglen@gmail.com>
 homepage: https://github.com/matthewfranglen/dart-jsonp
 description: Read from jsonp enabled websites
+environment:
+  sdk: ">=2.0.0 <3.0.0"
